@@ -1,0 +1,12 @@
+<Project>
+
+  <!-- Toolchain baseline for the workspace. See 8005-agv-program docs/adr/cross/0056.
+       Do not override TargetFramework or LangVersion in an individual project. -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>12.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+</Project>

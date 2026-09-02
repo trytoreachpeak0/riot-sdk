@@ -1,0 +1,21 @@
+<Project>
+
+  <!-- Central package management. Every version lives here; a project that
+       declares its own Version= fails the build (NU1008). -->
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <CentralPackageVersionOverrideEnabled>false</CentralPackageVersionOverrideEnabled>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageVersion Include="Microsoft.Kiota.Bundle" Version="1.17.4" />
+  </ItemGroup>
+
+  <!-- Test stack: xunit v3 only. xunit v2 is banned workspace-wide. -->
+  <ItemGroup>
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />
+    <PackageVersion Include="xunit.v3" Version="3.2.2" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />
+  </ItemGroup>
+
+</Project>
