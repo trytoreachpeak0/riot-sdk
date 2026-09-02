@@ -1,0 +1,43 @@
+name: test
+
+# Runs on the self-hosted runner on win11-01 (factory server Hyper-V guest).
+# There is no hosted-runner fallback: this workspace deliberately does not use
+# GitHub-hosted runners. See the workspace root CLAUDE.md.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# The runner takes one job at a time, but a fresh push while a job is running
+# would queue a second one behind it. Cancel the superseded run instead.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: [self-hosted, win11-01]
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: dotnet --info
+        shell: pwsh
+        run: dotnet --info
+
+      # Never assert on dotnet's console output here: the guest's locale is
+      # zh-CN and it prints 已通过! rather than Passed!. The exit code is the
+      # contract.
+      - name: Test
+        shell: pwsh
+        run: dotnet test csharp/RIoT.Sdk.Tests -c Release --logger "trx;LogFileName=test-results.trx"
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: '**/TestResults/*.trx'
+          if-no-files-found: warn
