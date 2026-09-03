@@ -1,7 +1,9 @@
 <Project>
 
-  <!-- Central package management. Every version lives here; a project that
-       declares its own Version= fails the build (NU1008). -->
+  <!-- Central package management. Every version lives here. Note that a project
+       declaring its own Version= does NOT fail: NuGet silently ignores it and the
+       version below wins. check-toolchain.ps1 at the workspace root is what
+       reports it, by reading the csproj as text. -->
   <PropertyGroup>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
     <CentralPackageVersionOverrideEnabled>false</CentralPackageVersionOverrideEnabled>
