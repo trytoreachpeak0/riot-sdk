@@ -22,6 +22,7 @@ from riot_sdk.core.ready_for_next_order import (
     SUCCESS_ORDER_STATE,
     is_ready_for_next_order,
 )
+from riot_sdk.core.dynamic_route_cost import DynamicRouteCostPresence
 from riot_sdk.core.route_cost import RouteCost
 from riot_sdk.core.route_graph import (
     MapEdge,
@@ -45,6 +46,7 @@ __all__ = [
     "Map",
     "Station",
     "RouteCost",
+    "DynamicRouteCostPresence",
     "MapEdge",
     "MapStationDetail",
     "RemovedEdge",

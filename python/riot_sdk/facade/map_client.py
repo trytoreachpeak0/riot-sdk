@@ -13,7 +13,7 @@ from riot_sdk.core.route_graph import (
     RemovedStation,
 )
 from riot_sdk.core.stations import Station
-from riot_sdk.facade import imap_wire
+from riot_sdk.facade import riot_wire
 
 if TYPE_CHECKING:
     from riot_sdk.facade.session import RiotSession
@@ -104,28 +104,28 @@ class MapClient:
         operation = f"mapInfo/edges/{map_id}"
         client = self._session.create_generated_imap_client()
         request = client.api.imap.v1.map_info.edges.by_map_id(map_id).to_get_request_information()
-        result = await imap_wire.read_async(
+        result = await riot_wire.read_async(
             self._session.request_adapter, request, operation
         )
 
-        return imap_wire.map_array(
+        return riot_wire.map_array(
             result,
             operation,
             lambda edge: MapEdge(
-                id=imap_wire.require_int(edge, operation, "id"),
-                start_node=imap_wire.require_int(edge, operation, "s_node", "snode"),
-                end_node=imap_wire.require_int(edge, operation, "e_node", "enode"),
-                cost_mm=imap_wire.require_float(edge, operation, "cost"),
-                start_x=imap_wire.require_int(edge, operation, "sx"),
-                start_y=imap_wire.require_int(edge, operation, "sy"),
-                end_x=imap_wire.require_int(edge, operation, "ex"),
-                end_y=imap_wire.require_int(edge, operation, "ey"),
-                start_facing=imap_wire.optional_float(edge, 0.0, "s_facing", "sfacing"),
-                end_facing=imap_wire.optional_float(edge, 0.0, "e_facing", "efacing"),
-                direction=imap_wire.optional_int(edge, 0, "direction"),
-                is_back_edge=imap_wire.optional_bool(edge, False, "is_back_edge", "isBackEdge"),
-                type=imap_wire.optional_int(edge, 0, "type"),
-                description=imap_wire.optional_str(edge, "desc") or "",
+                id=riot_wire.require_int(edge, operation, "id"),
+                start_node=riot_wire.require_int(edge, operation, "s_node", "snode"),
+                end_node=riot_wire.require_int(edge, operation, "e_node", "enode"),
+                cost_mm=riot_wire.require_float(edge, operation, "cost"),
+                start_x=riot_wire.require_int(edge, operation, "sx"),
+                start_y=riot_wire.require_int(edge, operation, "sy"),
+                end_x=riot_wire.require_int(edge, operation, "ex"),
+                end_y=riot_wire.require_int(edge, operation, "ey"),
+                start_facing=riot_wire.optional_float(edge, 0.0, "s_facing", "sfacing"),
+                end_facing=riot_wire.optional_float(edge, 0.0, "e_facing", "efacing"),
+                direction=riot_wire.optional_int(edge, 0, "direction"),
+                is_back_edge=riot_wire.optional_bool(edge, False, "is_back_edge", "isBackEdge"),
+                type=riot_wire.optional_int(edge, 0, "type"),
+                description=riot_wire.optional_str(edge, "desc") or "",
             ),
         )
 
@@ -140,26 +140,26 @@ class MapClient:
         request = (
             client.api.imap.v1.map_info.stations.by_map_id(map_id).to_get_request_information()
         )
-        result = await imap_wire.read_async(
+        result = await riot_wire.read_async(
             self._session.request_adapter, request, operation
         )
 
-        return imap_wire.map_array(
+        return riot_wire.map_array(
             result,
             operation,
             lambda station: MapStationDetail(
                 map_id=map_id,
-                station_id=imap_wire.require_int(station, operation, "id"),
-                name=imap_wire.require_str(station, operation, "name"),
-                edge_id=imap_wire.require_int(station, operation, "edge_id", "edgeId"),
-                pos_x=imap_wire.require_float(station, operation, "pos.x"),
-                pos_y=imap_wire.require_float(station, operation, "pos.y"),
-                pos_yaw=imap_wire.optional_float(station, 0.0, "pos.yaw"),
-                station_offset=imap_wire.optional_int(
+                station_id=riot_wire.require_int(station, operation, "id"),
+                name=riot_wire.require_str(station, operation, "name"),
+                edge_id=riot_wire.require_int(station, operation, "edge_id", "edgeId"),
+                pos_x=riot_wire.require_float(station, operation, "pos.x"),
+                pos_y=riot_wire.require_float(station, operation, "pos.y"),
+                pos_yaw=riot_wire.optional_float(station, 0.0, "pos.yaw"),
+                station_offset=riot_wire.optional_int(
                     station, 0, "station_offset", "stationOffset"
                 ),
-                type=imap_wire.optional_int(station, 0, "type"),
-                description=imap_wire.optional_str(station, "desc") or "",
+                type=riot_wire.optional_int(station, 0, "type"),
+                description=riot_wire.optional_str(station, "desc") or "",
             ),
         )
 
@@ -177,17 +177,17 @@ class MapClient:
             client.api.imap.v1.map_resource.removed_edge.by_map_id(map_id)
             .to_get_request_information()
         )
-        result = await imap_wire.read_async(
+        result = await riot_wire.read_async(
             self._session.request_adapter, request, operation
         )
 
-        return imap_wire.map_array(
+        return riot_wire.map_array(
             result,
             operation,
             lambda removed: RemovedEdge(
-                id=imap_wire.optional_int(removed, 0, "id"),
-                map_id=imap_wire.optional_int(removed, map_id, "mapId", "map_id"),
-                edge_id=imap_wire.require_int(removed, operation, "edgeId", "edge_id"),
+                id=riot_wire.optional_int(removed, 0, "id"),
+                map_id=riot_wire.optional_int(removed, map_id, "mapId", "map_id"),
+                edge_id=riot_wire.require_int(removed, operation, "edgeId", "edge_id"),
             ),
         )
 
@@ -203,18 +203,18 @@ class MapClient:
             client.api.imap.v1.map_resource.removed_station.by_map_id(map_id)
             .to_get_request_information()
         )
-        result = await imap_wire.read_async(
+        result = await riot_wire.read_async(
             self._session.request_adapter, request, operation
         )
 
-        return imap_wire.map_array(
+        return riot_wire.map_array(
             result,
             operation,
             lambda removed: RemovedStation(
-                id=imap_wire.optional_int(removed, 0, "id"),
-                map_id=imap_wire.optional_int(removed, map_id, "mapId", "map_id"),
-                station_id=imap_wire.require_int(removed, operation, "stationId", "station_id"),
-                station_name=imap_wire.optional_str(removed, "stationName", "station_name"),
+                id=riot_wire.optional_int(removed, 0, "id"),
+                map_id=riot_wire.optional_int(removed, map_id, "mapId", "map_id"),
+                station_id=riot_wire.require_int(removed, operation, "stationId", "station_id"),
+                station_name=riot_wire.optional_str(removed, "stationName", "station_name"),
             ),
         )
 
@@ -227,7 +227,7 @@ class MapClient:
         operation = "mapEdgeGroup/all"
         client = self._session.create_generated_imap_client()
         request = client.api.imap.v1.map_edge_group.all.to_get_request_information()
-        result = await imap_wire.read_async(
+        result = await riot_wire.read_async(
             self._session.request_adapter, request, operation
         )
 
@@ -264,21 +264,21 @@ class MapClient:
         groups: list[MapEdgeGroup] = []
         for group_name, members in result.items():
             groups.extend(
-                imap_wire.map_array(
+                riot_wire.map_array(
                     members,
                     operation,
                     lambda member, name=group_name: MapEdgeGroup(
                         group_name=name,
-                        id=imap_wire.optional_int(member, 0, "id"),
-                        map_id=imap_wire.require_int(member, operation, "mapId", "map_id"),
-                        map_name=imap_wire.optional_str(member, "mapName", "map_name") or "",
-                        edge_id=imap_wire.require_int(member, operation, "edgeId", "edge_id"),
-                        type=imap_wire.optional_str(member, "type") or "",
-                        is_deleted=imap_wire.optional_bool(
+                        id=riot_wire.optional_int(member, 0, "id"),
+                        map_id=riot_wire.require_int(member, operation, "mapId", "map_id"),
+                        map_name=riot_wire.optional_str(member, "mapName", "map_name") or "",
+                        edge_id=riot_wire.require_int(member, operation, "edgeId", "edge_id"),
+                        type=riot_wire.optional_str(member, "type") or "",
+                        is_deleted=riot_wire.optional_bool(
                             member, False, "isDelete", "is_delete"
                         ),
-                        gmt_create=imap_wire.optional_str(member, "gmtCreate", "gmt_create"),
-                        gmt_update=imap_wire.optional_str(member, "gmtUpdate", "gmt_update"),
+                        gmt_create=riot_wire.optional_str(member, "gmtCreate", "gmt_create"),
+                        gmt_update=riot_wire.optional_str(member, "gmtUpdate", "gmt_update"),
                     ),
                 )
             )

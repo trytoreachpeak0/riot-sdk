@@ -1,4 +1,9 @@
-"""Custom deserialization for the imap route-graph endpoints (BC-MAP-003).
+"""Custom deserialization for the RIoT endpoints whose wire format no generated model can read.
+
+Named for RIoT rather than for imap because the task module has one endpoint with the same
+problem: ``GET /api/task/v1/route/`` answers with a shape nobody has ever seen populated, so the
+SDK reports what is there rather than deserializing into a type it made up.
+
 
 The generated Kiota models cannot read these responses. Round 43 measured why, on the
 production RIoT: ``edges`` is snake_case and spells the compound keys differently from the
@@ -10,7 +15,7 @@ So these five endpoints reuse the generated layer for URL construction and auth 
 ``RequestInformation`` straight off the generated request builders) and read the body here.
 Everything in this module is internal to the SDK: the wire format must not reach product code.
 
-This mirrors ``csharp/RIoT.Sdk.Facade/ImapWire.cs`` (ADR-sdk-0004: both languages carry the
+This mirrors ``csharp/RIoT.Sdk.Facade/RiotWire.cs`` (ADR-sdk-0004: both languages carry the
 same seam).
 """
 

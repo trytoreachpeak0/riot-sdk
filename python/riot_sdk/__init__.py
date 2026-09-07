@@ -5,6 +5,7 @@ from riot_sdk.core.exceptions import RiotApiException
 from riot_sdk.core.dispatchable_vehicles import DispatchableVehicle, resolve_device_key
 from riot_sdk.core.maps import Map
 from riot_sdk.core.stations import Station
+from riot_sdk.core.dynamic_route_cost import DynamicRouteCostPresence
 from riot_sdk.core.route_cost import RouteCost
 from riot_sdk.core.route_graph import (
     MapEdge,
@@ -34,6 +35,7 @@ __all__ = [
     "Map",
     "Station",
     "RouteCost",
+    "DynamicRouteCostPresence",
     "MapEdge",
     "MapStationDetail",
     "RemovedEdge",

@@ -72,7 +72,7 @@ class RiotSession:
     @property
     def request_adapter(self) -> HttpxRequestAdapter:
         """Underlying Kiota adapter. Used by facades that build a request off the generated
-        layer but read the body themselves (see imap_wire)."""
+        layer but read the body themselves (see riot_wire)."""
         return self._adapter
 
     def create_generated_device_client(self):

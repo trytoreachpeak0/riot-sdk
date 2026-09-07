@@ -131,25 +131,25 @@ public sealed class MapClient
         var client = _session.CreateGeneratedImapClient();
         var request = client.Api.Imap.V1.MapInfo.Edges[mapId].ToGetRequestInformation();
 
-        return await ImapWire.ReadAsync(
+        return await RiotWire.ReadAsync(
             _session.Adapter,
             request,
             operation,
-            result => ImapWire.MapArray(result, operation, edge => new MapEdge(
-                Id: ImapWire.RequireInt(edge, operation, "id"),
-                StartNode: ImapWire.RequireInt(edge, operation, "s_node", "snode"),
-                EndNode: ImapWire.RequireInt(edge, operation, "e_node", "enode"),
-                CostMm: ImapWire.RequireDouble(edge, operation, "cost"),
-                StartX: ImapWire.RequireInt(edge, operation, "sx"),
-                StartY: ImapWire.RequireInt(edge, operation, "sy"),
-                EndX: ImapWire.RequireInt(edge, operation, "ex"),
-                EndY: ImapWire.RequireInt(edge, operation, "ey"),
-                StartFacing: ImapWire.OptionalDouble(edge, 0, "s_facing", "sfacing"),
-                EndFacing: ImapWire.OptionalDouble(edge, 0, "e_facing", "efacing"),
-                Direction: ImapWire.OptionalInt(edge, 0, "direction"),
-                IsBackEdge: ImapWire.OptionalBool(edge, false, "is_back_edge", "isBackEdge"),
-                Type: ImapWire.OptionalInt(edge, 0, "type"),
-                Description: ImapWire.OptionalString(edge, "desc") ?? string.Empty)),
+            result => RiotWire.MapArray(result, operation, edge => new MapEdge(
+                Id: RiotWire.RequireInt(edge, operation, "id"),
+                StartNode: RiotWire.RequireInt(edge, operation, "s_node", "snode"),
+                EndNode: RiotWire.RequireInt(edge, operation, "e_node", "enode"),
+                CostMm: RiotWire.RequireDouble(edge, operation, "cost"),
+                StartX: RiotWire.RequireInt(edge, operation, "sx"),
+                StartY: RiotWire.RequireInt(edge, operation, "sy"),
+                EndX: RiotWire.RequireInt(edge, operation, "ex"),
+                EndY: RiotWire.RequireInt(edge, operation, "ey"),
+                StartFacing: RiotWire.OptionalDouble(edge, 0, "s_facing", "sfacing"),
+                EndFacing: RiotWire.OptionalDouble(edge, 0, "e_facing", "efacing"),
+                Direction: RiotWire.OptionalInt(edge, 0, "direction"),
+                IsBackEdge: RiotWire.OptionalBool(edge, false, "is_back_edge", "isBackEdge"),
+                Type: RiotWire.OptionalInt(edge, 0, "type"),
+                Description: RiotWire.OptionalString(edge, "desc") ?? string.Empty)),
             cancellationToken).ConfigureAwait(false);
     }
 
@@ -166,21 +166,21 @@ public sealed class MapClient
         var client = _session.CreateGeneratedImapClient();
         var request = client.Api.Imap.V1.MapInfo.Stations[mapId].ToGetRequestInformation();
 
-        return await ImapWire.ReadAsync(
+        return await RiotWire.ReadAsync(
             _session.Adapter,
             request,
             operation,
-            result => ImapWire.MapArray(result, operation, station => new MapStationDetail(
+            result => RiotWire.MapArray(result, operation, station => new MapStationDetail(
                 MapId: mapId,
-                StationId: ImapWire.RequireInt(station, operation, "id"),
-                Name: ImapWire.RequireString(station, operation, "name"),
-                EdgeId: ImapWire.RequireInt(station, operation, "edge_id", "edgeId"),
-                PosX: ImapWire.RequireDouble(station, operation, "pos.x"),
-                PosY: ImapWire.RequireDouble(station, operation, "pos.y"),
-                PosYaw: ImapWire.OptionalDouble(station, 0, "pos.yaw"),
-                StationOffset: ImapWire.OptionalInt(station, 0, "station_offset", "stationOffset"),
-                Type: ImapWire.OptionalInt(station, 0, "type"),
-                Description: ImapWire.OptionalString(station, "desc") ?? string.Empty)),
+                StationId: RiotWire.RequireInt(station, operation, "id"),
+                Name: RiotWire.RequireString(station, operation, "name"),
+                EdgeId: RiotWire.RequireInt(station, operation, "edge_id", "edgeId"),
+                PosX: RiotWire.RequireDouble(station, operation, "pos.x"),
+                PosY: RiotWire.RequireDouble(station, operation, "pos.y"),
+                PosYaw: RiotWire.OptionalDouble(station, 0, "pos.yaw"),
+                StationOffset: RiotWire.OptionalInt(station, 0, "station_offset", "stationOffset"),
+                Type: RiotWire.OptionalInt(station, 0, "type"),
+                Description: RiotWire.OptionalString(station, "desc") ?? string.Empty)),
             cancellationToken).ConfigureAwait(false);
     }
 
@@ -202,14 +202,14 @@ public sealed class MapClient
         var client = _session.CreateGeneratedImapClient();
         var request = client.Api.Imap.V1.MapResource.RemovedEdge[mapId].ToGetRequestInformation();
 
-        return await ImapWire.ReadAsync(
+        return await RiotWire.ReadAsync(
             _session.Adapter,
             request,
             operation,
-            result => ImapWire.MapArray(result, operation, removed => new RemovedEdge(
-                Id: ImapWire.OptionalInt(removed, 0, "id"),
-                MapId: ImapWire.OptionalInt(removed, mapId, "mapId", "map_id"),
-                EdgeId: ImapWire.RequireInt(removed, operation, "edgeId", "edge_id"))),
+            result => RiotWire.MapArray(result, operation, removed => new RemovedEdge(
+                Id: RiotWire.OptionalInt(removed, 0, "id"),
+                MapId: RiotWire.OptionalInt(removed, mapId, "mapId", "map_id"),
+                EdgeId: RiotWire.RequireInt(removed, operation, "edgeId", "edge_id"))),
             cancellationToken).ConfigureAwait(false);
     }
 
@@ -226,15 +226,15 @@ public sealed class MapClient
         var client = _session.CreateGeneratedImapClient();
         var request = client.Api.Imap.V1.MapResource.RemovedStation[mapId].ToGetRequestInformation();
 
-        return await ImapWire.ReadAsync(
+        return await RiotWire.ReadAsync(
             _session.Adapter,
             request,
             operation,
-            result => ImapWire.MapArray(result, operation, removed => new RemovedStation(
-                Id: ImapWire.OptionalInt(removed, 0, "id"),
-                MapId: ImapWire.OptionalInt(removed, mapId, "mapId", "map_id"),
-                StationId: ImapWire.RequireInt(removed, operation, "stationId", "station_id"),
-                StationName: ImapWire.OptionalString(removed, "stationName", "station_name"))),
+            result => RiotWire.MapArray(result, operation, removed => new RemovedStation(
+                Id: RiotWire.OptionalInt(removed, 0, "id"),
+                MapId: RiotWire.OptionalInt(removed, mapId, "mapId", "map_id"),
+                StationId: RiotWire.RequireInt(removed, operation, "stationId", "station_id"),
+                StationName: RiotWire.OptionalString(removed, "stationName", "station_name"))),
             cancellationToken).ConfigureAwait(false);
     }
 
@@ -253,7 +253,7 @@ public sealed class MapClient
         var client = _session.CreateGeneratedImapClient();
         var request = client.Api.Imap.V1.MapEdgeGroup.All.ToGetRequestInformation();
 
-        return await ImapWire.ReadAsync(
+        return await RiotWire.ReadAsync(
             _session.Adapter,
             request,
             operation,
@@ -293,16 +293,16 @@ public sealed class MapClient
         var groups = new List<MapEdgeGroup>();
         foreach (var group in result.EnumerateObject())
         {
-            groups.AddRange(ImapWire.MapArray(group.Value, operation, member => new MapEdgeGroup(
+            groups.AddRange(RiotWire.MapArray(group.Value, operation, member => new MapEdgeGroup(
                 GroupName: group.Name,
-                Id: ImapWire.OptionalInt(member, 0, "id"),
-                MapId: ImapWire.RequireInt(member, operation, "mapId", "map_id"),
-                MapName: ImapWire.OptionalString(member, "mapName", "map_name") ?? string.Empty,
-                EdgeId: ImapWire.RequireInt(member, operation, "edgeId", "edge_id"),
-                Type: ImapWire.OptionalString(member, "type") ?? string.Empty,
-                IsDeleted: ImapWire.OptionalBool(member, false, "isDelete", "is_delete"),
-                GmtCreate: ImapWire.OptionalString(member, "gmtCreate", "gmt_create"),
-                GmtUpdate: ImapWire.OptionalString(member, "gmtUpdate", "gmt_update"))));
+                Id: RiotWire.OptionalInt(member, 0, "id"),
+                MapId: RiotWire.RequireInt(member, operation, "mapId", "map_id"),
+                MapName: RiotWire.OptionalString(member, "mapName", "map_name") ?? string.Empty,
+                EdgeId: RiotWire.RequireInt(member, operation, "edgeId", "edge_id"),
+                Type: RiotWire.OptionalString(member, "type") ?? string.Empty,
+                IsDeleted: RiotWire.OptionalBool(member, false, "isDelete", "is_delete"),
+                GmtCreate: RiotWire.OptionalString(member, "gmtCreate", "gmt_create"),
+                GmtUpdate: RiotWire.OptionalString(member, "gmtUpdate", "gmt_update"))));
         }
 
         return groups;

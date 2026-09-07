@@ -249,6 +249,44 @@ public sealed class TaskClient
     }
 
     /// <summary>
+    /// GET /api/task/v1/route/ — whether RIoT currently holds any dynamic route cost.
+    /// Throws <see cref="RiotApiException"/> on business failure (ADR-sdk-0005).
+    /// </summary>
+    /// <remarks>
+    /// Reports presence and a count, not the values: every observation of this endpoint has
+    /// answered <c>"result":{}</c>, so its populated shape has never been seen and there is
+    /// nothing honest to deserialize into. The body is read here rather than through the generated
+    /// model for the same reason (ADR-sdk-0009 covers the same choice for the imap endpoints).
+    /// </remarks>
+    public async Task<DynamicRouteCostPresence> ReadDynamicRouteCostPresenceAsync(
+        CancellationToken cancellationToken = default)
+    {
+        const string operation = "route/";
+        var client = _session.CreateGeneratedTaskClient();
+        var request = client.Api.Task.V1.Route.EmptyPathSegment.ToGetRequestInformation();
+
+        return await RiotWire.ReadAsync(
+            _session.Adapter,
+            request,
+            operation,
+            result => result.ValueKind switch
+            {
+                System.Text.Json.JsonValueKind.Object =>
+                    Presence(System.Linq.Enumerable.Count(result.EnumerateObject())),
+                System.Text.Json.JsonValueKind.Array => Presence(result.GetArrayLength()),
+                // Undefined or null: the field was absent, which is the same "nothing here" as an
+                // empty object. Anything else is a shape violation and fails closed.
+                System.Text.Json.JsonValueKind.Undefined or System.Text.Json.JsonValueKind.Null =>
+                    Presence(0),
+                _ => throw new RiotApiException(
+                    $"{operation} returned result of kind {result.ValueKind}, expected an object."),
+            },
+            cancellationToken).ConfigureAwait(false);
+
+        static DynamicRouteCostPresence Presence(int count) => new(count > 0, count);
+    }
+
+    /// <summary>
     /// POST /api/task/v1/order/command/{orderId} with CMD_ORDER_CANCEL (BC-ORDER-003).
     /// Uses string orderId; does not disable the vehicle. Throws on business failure (ADR-sdk-0005).
     /// </summary>

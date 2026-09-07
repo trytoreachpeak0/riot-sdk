@@ -11,8 +11,10 @@ from riot_sdk.core.business_response import (
 )
 from riot_sdk.core.dispatchable_vehicles import DispatchableVehicle, resolve_device_key
 from riot_sdk.core.exceptions import RiotApiException
+from riot_sdk.core.dynamic_route_cost import DynamicRouteCostPresence
 from riot_sdk.core.route_cost import RouteCost
 from riot_sdk.core.vehicle_facts import VehicleCard, VehicleExecutionFacts
+from riot_sdk.facade import riot_wire
 from riot_sdk.generated.task.models.batch_vehicle_operation import BatchVehicleOperation
 from riot_sdk.generated.task.models.order_command_d_t_o_object import OrderCommandDTOObject
 from riot_sdk.generated.task.models.order_command_d_t_o_object_command_type import (
@@ -221,6 +223,33 @@ class TaskClient:
         ensure_success(response.code, response.message)
         return int(
             require_result(response.result, "queryNearestStart", "near-start-missing")
+        )
+
+    async def read_dynamic_route_cost_presence(self) -> DynamicRouteCostPresence:
+        """GET /api/task/v1/route/ (ADR-sdk-0005).
+
+        Whether RIoT currently holds any dynamic route cost. Reports presence and a count, not
+        the values: every observation of this endpoint has answered ``"result":{}``, so its
+        populated shape has never been seen and there is nothing honest to deserialize into. The
+        body is read here rather than through the generated model for the same reason
+        (ADR-sdk-0009 covers the same choice for the imap endpoints).
+        """
+        operation = "route/"
+        client = self._session.create_generated_task_client()
+        request = client.api.task.v1.route.empty_path_segment.to_get_request_information()
+        result = await riot_wire.read_async(
+            self._session.request_adapter, request, operation
+        )
+
+        if result is None:
+            # The field was absent, which is the same "nothing here" as an empty object.
+            return DynamicRouteCostPresence(present=False, entry_count=0)
+        if isinstance(result, (dict, list)):
+            count = len(result)
+            return DynamicRouteCostPresence(present=count > 0, entry_count=count)
+
+        raise RiotApiException(
+            f"{operation} returned result of type {type(result).__name__}, expected an object."
         )
 
     async def cancel_order(self, order_id: str, reason: str | None = None) -> None:

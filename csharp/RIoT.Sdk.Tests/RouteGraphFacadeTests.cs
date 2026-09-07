@@ -316,6 +316,37 @@ public class RouteGraphFacadeTests
     }
 
     [Fact]
+    public async Task Dynamic_route_cost_reports_absence_for_the_empty_object_every_observation_saw()
+    {
+        // Round 15 on the test RCS and Round 43 on the production one both answered exactly this.
+        await using var session = SessionOver("""{"code":"0","message":"成功","result":{},"tid":""}""");
+
+        DynamicRouteCostPresence presence = await session.Tasks.ReadDynamicRouteCostPresenceAsync(
+            TestContext.Current.CancellationToken);
+
+        Assert.False(presence.Present);
+        Assert.Equal(0, presence.EntryCount);
+    }
+
+    [Fact]
+    public async Task Dynamic_route_cost_reports_presence_and_a_count_without_inventing_a_shape()
+    {
+        // Nobody has seen this populated, so the SDK counts entries rather than deserializing into
+        // a type it made up. Both plausible spellings are counted the same way.
+        await using var asObject = SessionOver("""{"code":"0","result":{"12":1500.0,"25":900.0}}""");
+        DynamicRouteCostPresence fromObject = await asObject.Tasks.ReadDynamicRouteCostPresenceAsync(
+            TestContext.Current.CancellationToken);
+        Assert.True(fromObject.Present);
+        Assert.Equal(2, fromObject.EntryCount);
+
+        await using var asArray = SessionOver("""{"code":"0","result":[{"edgeId":1},{"edgeId":2}]}""");
+        DynamicRouteCostPresence fromArray = await asArray.Tasks.ReadDynamicRouteCostPresenceAsync(
+            TestContext.Current.CancellationToken);
+        Assert.True(fromArray.Present);
+        Assert.Equal(2, fromArray.EntryCount);
+    }
+
+    [Fact]
     public async Task Each_method_calls_the_endpoint_the_whitelist_approved()
     {
         // These five methods route by hand off the generated request builders rather than through
@@ -330,6 +361,8 @@ public class RouteGraphFacadeTests
         await session.Maps.ListRemovedEdgesAsync(mapId: 25, cancellationToken: ct);
         await session.Maps.ListRemovedStationsAsync(mapId: 25, cancellationToken: ct);
         await session.Maps.ListEdgeGroupsAsync(ct);
+        // In REQ-0146's named list since before CP-0001; the engine reads it for presence only.
+        await session.Tasks.ReadDynamicRouteCostPresenceAsync(ct);
 
         Assert.Equal(
             [
@@ -338,6 +371,7 @@ public class RouteGraphFacadeTests
                 "http://riot.test/api/imap/v1/mapResource/removedEdge/25",
                 "http://riot.test/api/imap/v1/mapResource/removedStation/25",
                 "http://riot.test/api/imap/v1/mapEdgeGroup/all",
+                "http://riot.test/api/task/v1/route/",
             ],
             recorder.Urls);
     }

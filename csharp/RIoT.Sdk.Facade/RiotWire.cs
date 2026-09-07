@@ -5,7 +5,7 @@ using RIoT.Sdk.Core;
 namespace RIoT.Sdk.Facade;
 
 /// <summary>
-/// Custom deserialization for the imap route-graph endpoints (BC-MAP-003).
+/// Custom deserialization for the RIoT endpoints whose wire format no generated model can read.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -21,7 +21,12 @@ namespace RIoT.Sdk.Facade;
 /// body here. Everything in this file is internal: the wire format must not reach product code.
 /// </para>
 /// </remarks>
-internal static class ImapWire
+/// <remarks>
+/// Named for RIoT rather than for imap because the task module has one endpoint with the same
+/// problem: <c>GET /api/task/v1/route/</c> answers with a shape nobody has ever seen populated,
+/// so the SDK reports what is there rather than deserializing into a type it made up.
+/// </remarks>
+internal static class RiotWire
 {
     /// <summary>
     /// Sends a prepared GET, validates the ResponseMsg envelope (ADR-sdk-0005), and hands the

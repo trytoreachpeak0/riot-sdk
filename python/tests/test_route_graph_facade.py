@@ -13,7 +13,7 @@ from contextlib import asynccontextmanager
 import httpx
 import pytest
 
-from riot_sdk import RiotApiException, RiotOptions, RiotSession
+from riot_sdk import DynamicRouteCostPresence, RiotApiException, RiotOptions, RiotSession
 
 # runs/003-edges-map-25.json, first edge, every key as it came off the wire.
 _EDGES_BODY = """{"code":"0","message":"成功","msgDetail":"","result":[
@@ -234,6 +234,28 @@ async def test_a_business_failure_code_raises_instead_of_returning_an_empty_grap
 
 
 @pytest.mark.asyncio
+async def test_dynamic_route_cost_reports_absence_for_the_empty_object_every_observation_saw() -> None:
+    # Round 15 on the test RCS and Round 43 on the production one both answered exactly this.
+    async with _session_over('{"code":"0","message":"成功","result":{},"tid":""}') as session:
+        presence = await session.tasks.read_dynamic_route_cost_presence()
+
+    assert presence == DynamicRouteCostPresence(present=False, entry_count=0)
+
+
+@pytest.mark.asyncio
+async def test_dynamic_route_cost_counts_entries_without_inventing_a_shape() -> None:
+    # Nobody has seen this populated, so the SDK counts entries rather than deserializing into a
+    # type it made up. Both plausible spellings are counted the same way.
+    async with _session_over('{"code":"0","result":{"12":1500.0,"25":900.0}}') as session:
+        from_object = await session.tasks.read_dynamic_route_cost_presence()
+    assert from_object == DynamicRouteCostPresence(present=True, entry_count=2)
+
+    async with _session_over('{"code":"0","result":[{"edgeId":1},{"edgeId":2}]}') as session:
+        from_array = await session.tasks.read_dynamic_route_cost_presence()
+    assert from_array == DynamicRouteCostPresence(present=True, entry_count=2)
+
+
+@pytest.mark.asyncio
 async def test_each_method_calls_the_endpoint_the_whitelist_approved() -> None:
     # These five methods route by hand off the generated request builders rather than through a
     # generated model, so nothing else would notice a wrong URL: the fixed-body transport
@@ -245,6 +267,8 @@ async def test_each_method_calls_the_endpoint_the_whitelist_approved() -> None:
         await session.maps.list_removed_edges(map_id=25)
         await session.maps.list_removed_stations(map_id=25)
         await session.maps.list_edge_groups()
+        # In REQ-0146's named list since before CP-0001; the engine reads it for presence only.
+        await session.tasks.read_dynamic_route_cost_presence()
 
     assert urls == [
         "http://riot.test/api/imap/v1/mapInfo/edges/25",
@@ -252,4 +276,5 @@ async def test_each_method_calls_the_endpoint_the_whitelist_approved() -> None:
         "http://riot.test/api/imap/v1/mapResource/removedEdge/25",
         "http://riot.test/api/imap/v1/mapResource/removedStation/25",
         "http://riot.test/api/imap/v1/mapEdgeGroup/all",
+        "http://riot.test/api/task/v1/route/",
     ]
