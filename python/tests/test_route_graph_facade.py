@@ -60,16 +60,14 @@ _EDGE_GROUPS_BODY = """{"code":"0","message":"成功","msgDetail":"","result":{
 async def _session_over(body: str, urls: list[str] | None = None):
     def handler(request: httpx.Request) -> httpx.Response:
         if urls is not None:
-            urls.append(request.url.path)
+            urls.append(str(request.url))
         return httpx.Response(
             200, text=body, headers={"Content-Type": "application/json"}
         )
 
     # No base_url on the transport: httpx would merge it with the absolute URL Kiota builds and
-    # leave a doubled slash. Without one the host falls back to the value baked into the OpenAPI
-    # description, because HttpxRequestAdapter discards the base_url RiotSession passes it and
-    # reads only the httpx client's — a defect of its own, tracked outside this facade. Only the
-    # path is asserted below, so the host does not matter to what these tests check.
+    # leave a doubled slash in the recorded URL. RiotSession pins the adapter's base_url itself,
+    # so the host below comes from RiotOptions either way.
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
         options = RiotOptions(base_url="http://riot.test", call_api_key="test-call-api-key")
         async with RiotSession(options, client=client) as session:
@@ -249,9 +247,9 @@ async def test_each_method_calls_the_endpoint_the_whitelist_approved() -> None:
         await session.maps.list_edge_groups()
 
     assert urls == [
-        "/api/imap/v1/mapInfo/edges/25",
-        "/api/imap/v1/mapInfo/stations/25",
-        "/api/imap/v1/mapResource/removedEdge/25",
-        "/api/imap/v1/mapResource/removedStation/25",
-        "/api/imap/v1/mapEdgeGroup/all",
+        "http://riot.test/api/imap/v1/mapInfo/edges/25",
+        "http://riot.test/api/imap/v1/mapInfo/stations/25",
+        "http://riot.test/api/imap/v1/mapResource/removedEdge/25",
+        "http://riot.test/api/imap/v1/mapResource/removedStation/25",
+        "http://riot.test/api/imap/v1/mapEdgeGroup/all",
     ]

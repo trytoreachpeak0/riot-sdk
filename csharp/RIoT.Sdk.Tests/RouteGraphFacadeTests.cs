@@ -333,11 +333,11 @@ public class RouteGraphFacadeTests
 
         Assert.Equal(
             [
-                "/api/imap/v1/mapInfo/edges/25",
-                "/api/imap/v1/mapInfo/stations/25",
-                "/api/imap/v1/mapResource/removedEdge/25",
-                "/api/imap/v1/mapResource/removedStation/25",
-                "/api/imap/v1/mapEdgeGroup/all",
+                "http://riot.test/api/imap/v1/mapInfo/edges/25",
+                "http://riot.test/api/imap/v1/mapInfo/stations/25",
+                "http://riot.test/api/imap/v1/mapResource/removedEdge/25",
+                "http://riot.test/api/imap/v1/mapResource/removedStation/25",
+                "http://riot.test/api/imap/v1/mapEdgeGroup/all",
             ],
             recorder.Urls);
     }
@@ -383,7 +383,7 @@ public class RouteGraphFacadeTests
             HttpRequestMessage request,
             CancellationToken cancellationToken)
         {
-            _urls.Add(request.RequestUri!.AbsolutePath);
+            _urls.Add(request.RequestUri!.ToString());
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = new StringContent(_body, Encoding.UTF8, "application/json"),

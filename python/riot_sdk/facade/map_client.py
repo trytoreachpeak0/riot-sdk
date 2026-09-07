@@ -55,6 +55,45 @@ class MapClient:
             if s.id is not None and s.name
         ]
 
+    async def list_stations_strict(self, map_id: int) -> list[Station]:
+        """Reject malformed or duplicate station rows instead of filtering them."""
+        if map_id <= 0:
+            raise ValueError("map_id must be positive")
+
+        client = self._session.create_generated_imap_client()
+        response = require_response(
+            await client.api.imap.v1.map_info.stations.by_map_id(map_id).get(),
+            f"stations/{map_id}",
+        )
+        ensure_success(response.code, response.message)
+        if response.result is None:
+            raise RiotApiException(
+                f"stations/{map_id} returned null result.",
+                business_code="station-catalog-missing",
+            )
+        if not response.result:
+            raise RiotApiException(
+                f"stations/{map_id} returned an empty station catalog.",
+                business_code="station-catalog-empty",
+            )
+
+        station_ids: set[int] = set()
+        stations: list[Station] = []
+        for row in response.result:
+            if row.id is None or row.id <= 0 or not row.name or not row.name.strip():
+                raise RiotApiException(
+                    f"stations/{map_id} returned a malformed station row.",
+                    business_code="station-catalog-entry-invalid",
+                )
+            if row.id in station_ids:
+                raise RiotApiException(
+                    f"stations/{map_id} returned duplicate station id {row.id}.",
+                    business_code="station-catalog-duplicate",
+                )
+            station_ids.add(row.id)
+            stations.append(Station(map_id=map_id, station_id=row.id, name=row.name))
+        return stations
+
     async def list_edges(self, map_id: int) -> list[MapEdge]:
         """GET /api/imap/v1/mapInfo/edges/{mapId} (BC-MAP-003 / ADR-sdk-0005).
 

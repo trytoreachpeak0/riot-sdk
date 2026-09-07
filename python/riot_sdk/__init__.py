@@ -14,6 +14,14 @@ from riot_sdk.core.route_graph import (
     RemovedStation,
 )
 from riot_sdk.core.order_ref import OrderRef
+from riot_sdk.core.order_snapshots import (
+    OrderLookupResult,
+    OrderLookupStatus,
+    OrderMissionSnapshot,
+    OrderSnapshot,
+)
+from riot_sdk.core.order_state_page import OrderStatePage, OrderStateRecord
+from riot_sdk.core.vehicle_facts import VehicleCard, VehicleExecutionFacts
 from riot_sdk.core.ready_for_next_order import is_ready_for_next_order
 from riot_sdk.facade.session import RiotSession
 
@@ -32,5 +40,13 @@ __all__ = [
     "RemovedStation",
     "MapEdgeGroup",
     "OrderRef",
+    "OrderLookupResult",
+    "OrderLookupStatus",
+    "OrderMissionSnapshot",
+    "OrderSnapshot",
+    "OrderStatePage",
+    "OrderStateRecord",
+    "VehicleCard",
+    "VehicleExecutionFacts",
     "is_ready_for_next_order",
 ]
