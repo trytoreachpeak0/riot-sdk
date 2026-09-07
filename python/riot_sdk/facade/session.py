@@ -54,6 +54,12 @@ class RiotSession:
         self.token_provider.set_access_token(tokens.access_token)
         return tokens
 
+    @property
+    def request_adapter(self) -> HttpxRequestAdapter:
+        """Underlying Kiota adapter. Used by facades that build a request off the generated
+        layer but read the body themselves (see ``imap_wire``)."""
+        return self._adapter
+
     def create_generated_device_client(self):
         from riot_sdk.generated.device.device_client import DeviceClient as GenDeviceClient
 

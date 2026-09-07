@@ -6,6 +6,13 @@ from riot_sdk.core.dispatchable_vehicles import DispatchableVehicle, resolve_dev
 from riot_sdk.core.maps import Map
 from riot_sdk.core.stations import Station
 from riot_sdk.core.route_cost import RouteCost
+from riot_sdk.core.route_graph import (
+    MapEdge,
+    MapEdgeGroup,
+    MapStationDetail,
+    RemovedEdge,
+    RemovedStation,
+)
 from riot_sdk.core.order_ref import OrderRef
 from riot_sdk.core.ready_for_next_order import is_ready_for_next_order
 from riot_sdk.facade.session import RiotSession
@@ -19,6 +26,11 @@ __all__ = [
     "Map",
     "Station",
     "RouteCost",
+    "MapEdge",
+    "MapStationDetail",
+    "RemovedEdge",
+    "RemovedStation",
+    "MapEdgeGroup",
     "OrderRef",
     "is_ready_for_next_order",
 ]
