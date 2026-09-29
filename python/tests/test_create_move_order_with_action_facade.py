@@ -155,6 +155,7 @@ async def test_create_move_order_with_wrong_action_type_is_rejected_without_http
     )
 
     assert isinstance(error, TypeError)
+    assert str(error) == "action_after_move must be an OrderMissionAction"
     assert requests == []
 
 
