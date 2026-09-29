@@ -14,6 +14,7 @@ from riot_sdk.core.route_graph import (
     RemovedEdge,
     RemovedStation,
 )
+from riot_sdk.core.order_mission_action import OrderMissionAction
 from riot_sdk.core.order_ref import OrderRef
 from riot_sdk.core.order_snapshots import (
     OrderLookupResult,
@@ -42,6 +43,7 @@ __all__ = [
     "RemovedStation",
     "MapEdgeGroup",
     "OrderRef",
+    "OrderMissionAction",
     "OrderLookupResult",
     "OrderLookupStatus",
     "OrderMissionSnapshot",

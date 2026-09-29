@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import inspect
+
 import pytest
 
 from riot_sdk import (
@@ -24,6 +26,11 @@ def test_public_facade_contract_matches_declared_cross_language_manifest() -> No
     assert hasattr(TaskClient, "get_vehicle_card")
     assert hasattr(TaskClient, "get_vehicle_execution_facts")
     assert hasattr(MapClient, "list_stations_strict")
+    # The move + act order goes through create_move_order (a C# overload), never a new
+    # name: the control server's RIoT call allowlist is matched by Facade method name.
+    parameter = inspect.signature(OrderClient.create_move_order).parameters["action_after_move"]
+    assert parameter.kind is inspect.Parameter.KEYWORD_ONLY
+    assert parameter.default is None
 
 
 def test_order_lookup_result_enforces_status_payload_invariants() -> None:

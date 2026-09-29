@@ -9,6 +9,7 @@ from riot_sdk.core.dispatchable_vehicles import DispatchableVehicle, resolve_dev
 from riot_sdk.core.exceptions import RiotApiException
 from riot_sdk.core.maps import Map
 from riot_sdk.core.options import RiotOptions
+from riot_sdk.core.order_mission_action import OrderMissionAction
 from riot_sdk.core.order_ref import OrderRef
 from riot_sdk.core.order_snapshots import (
     OrderLookupResult,
@@ -53,6 +54,7 @@ __all__ = [
     "RemovedStation",
     "MapEdgeGroup",
     "OrderRef",
+    "OrderMissionAction",
     "OrderLookupResult",
     "OrderLookupStatus",
     "OrderMissionSnapshot",
