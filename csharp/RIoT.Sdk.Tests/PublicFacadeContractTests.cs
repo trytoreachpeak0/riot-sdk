@@ -17,6 +17,15 @@ public sealed class PublicFacadeContractTests
         Assert.NotNull(typeof(TaskClient).GetMethod(nameof(TaskClient.GetVehicleCardAsync)));
         Assert.NotNull(typeof(TaskClient).GetMethod(nameof(TaskClient.GetVehicleExecutionFactsAsync)));
         Assert.NotNull(typeof(MapClient).GetMethod(nameof(MapClient.ListStationsStrictAsync)));
+
+        // The move + act order is an overload of CreateMoveOrderAsync, never a new name:
+        // the control server's RIoT call allowlist is matched by Facade method name.
+        Assert.Equal(
+            2,
+            typeof(OrderClient).GetMethods().Count(method => method.Name == nameof(OrderClient.CreateMoveOrderAsync)));
+        Assert.NotNull(typeof(OrderClient).GetMethod(
+            nameof(OrderClient.CreateMoveOrderAsync),
+            [typeof(string), typeof(string), typeof(int), typeof(int), typeof(OrderMissionAction), typeof(string), typeof(CancellationToken)]));
     }
 
     [Fact]

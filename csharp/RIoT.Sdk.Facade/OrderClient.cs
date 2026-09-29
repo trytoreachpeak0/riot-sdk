@@ -29,6 +29,71 @@ public sealed class OrderClient
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(mapId);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(destinationStationId);
 
+        return await CreateByDefaultMissionsAsync(
+            upperId,
+            appointVehicleKey,
+            orderName,
+            [MoveMission(mapId, destinationStationId)],
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// POST /api/order/v1/add/byDefaultMissions — a move mission followed by one act mission,
+    /// e.g. charging: <c>[{move, mapId, destination}, {act, 78, 1, 0}]</c>.
+    /// Every other body field is identical to the single-segment overload.
+    /// This is an overload rather than a new name on purpose: the control server's RIoT
+    /// call allowlist is matched by Facade method name.
+    /// Throws <see cref="RiotApiException"/> on business failure (ADR-sdk-0005).
+    /// </summary>
+    public async Task<OrderRef> CreateMoveOrderAsync(
+        string upperId,
+        string appointVehicleKey,
+        int mapId,
+        int destinationStationId,
+        OrderMissionAction actionAfterMove,
+        string? orderName = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(upperId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(appointVehicleKey);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(mapId);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(destinationStationId);
+        ArgumentNullException.ThrowIfNull(actionAfterMove);
+
+        return await CreateByDefaultMissionsAsync(
+            upperId,
+            appointVehicleKey,
+            orderName,
+            [
+                MoveMission(mapId, destinationStationId),
+                new RIoT.Sdk.Generated.Order.Models.MissionDTO
+                {
+                    Type = "act",
+                    ActionId = actionAfterMove.ActionId,
+                    ActionParam1 = actionAfterMove.ActionParam1,
+                    ActionParam2 = actionAfterMove.ActionParam2,
+                },
+            ],
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    private static RIoT.Sdk.Generated.Order.Models.MissionDTO MoveMission(
+        int mapId,
+        int destinationStationId) =>
+        new()
+        {
+            Type = "move",
+            MapId = mapId,
+            Destination = destinationStationId,
+        };
+
+    private async Task<OrderRef> CreateByDefaultMissionsAsync(
+        string upperId,
+        string appointVehicleKey,
+        string? orderName,
+        List<RIoT.Sdk.Generated.Order.Models.MissionDTO> missions,
+        CancellationToken cancellationToken)
+    {
         var client = _session.CreateGeneratedOrderClient();
         var body = new RIoT.Sdk.Generated.Order.Models.OrderRecordDTOObject
         {
@@ -37,15 +102,7 @@ public sealed class OrderClient
             LockStatus = 0,
             OrderName = string.IsNullOrWhiteSpace(orderName) ? upperId : orderName,
             UpperId = upperId,
-            Mission =
-            [
-                new RIoT.Sdk.Generated.Order.Models.MissionDTO
-                {
-                    Type = "move",
-                    MapId = mapId,
-                    Destination = destinationStationId,
-                },
-            ],
+            Mission = missions,
         };
 
         var response = RiotBusinessResponse.RequireResponse(
@@ -355,7 +412,13 @@ public sealed class OrderClient
                 missions.Add(new OrderMissionSnapshot(
                     GetOptionalString(mission, "type"),
                     GetOptionalInt32(mission, "mapId"),
-                    GetOptionalInt32(mission, "destination")));
+                    GetOptionalInt32(mission, "destination"))
+                {
+                    ActionId = GetOptionalInt32(mission, "actionId"),
+                    ActionParam1 = GetOptionalInt32(mission, "actionParam1"),
+                    ActionParam2 = GetOptionalInt32(mission, "actionParam2"),
+                    ResultCode = GetOptionalInt32(mission, "resultCode"),
+                });
             }
         }
 

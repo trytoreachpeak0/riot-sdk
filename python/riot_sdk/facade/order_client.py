@@ -7,6 +7,7 @@ from kiota_abstractions.base_request_configuration import RequestConfiguration
 
 from riot_sdk.core.business_response import ensure_success, is_success_code, require_response
 from riot_sdk.core.exceptions import RiotApiException
+from riot_sdk.core.order_mission_action import OrderMissionAction
 from riot_sdk.core.order_ref import OrderRef
 from riot_sdk.core.order_snapshots import (
     OrderLookupResult,
@@ -70,6 +71,10 @@ def _snapshot_from_payload(result: Any) -> OrderSnapshot | None:
                 type=mission.get("type"),
                 map_id=mission.get("mapId"),
                 destination=mission.get("destination"),
+                action_id=mission.get("actionId"),
+                action_param1=mission.get("actionParam1"),
+                action_param2=mission.get("actionParam2"),
+                result_code=mission.get("resultCode"),
             )
             for mission in mission_rows
             if isinstance(mission, dict)
@@ -90,8 +95,16 @@ class OrderClient:
         map_id: int,
         destination_station_id: int,
         order_name: str | None = None,
+        *,
+        action_after_move: OrderMissionAction | None = None,
     ) -> OrderRef:
-        """POST /api/order/v1/add/byDefaultMissions — single-segment move (BC-ORDER-001)."""
+        """POST /api/order/v1/add/byDefaultMissions (BC-ORDER-001).
+
+        Without ``action_after_move``: a single-segment move, unchanged.
+        With it: ``[{move, mapId, destination}, {act, actionId, actionParam1, actionParam2}]``,
+        every other body field identical. Same method name on purpose (the C# side is an
+        overload): the control server's RIoT call allowlist is matched by Facade method name.
+        """
         if not upper_id or not upper_id.strip():
             raise ValueError("upper_id is required")
         if not appoint_vehicle_key or not appoint_vehicle_key.strip():
@@ -100,6 +113,25 @@ class OrderClient:
             raise ValueError("map_id must be positive")
         if destination_station_id <= 0:
             raise ValueError("destination_station_id must be positive")
+        if action_after_move is not None and not isinstance(action_after_move, OrderMissionAction):
+            raise TypeError("action_after_move must be an OrderMissionAction")
+
+        missions = [
+            MissionDTO(
+                type="move",
+                map_id=map_id,
+                destination=destination_station_id,
+            )
+        ]
+        if action_after_move is not None:
+            missions.append(
+                MissionDTO(
+                    type="act",
+                    action_id=action_after_move.action_id,
+                    action_param1=action_after_move.action_param1,
+                    action_param2=action_after_move.action_param2,
+                )
+            )
 
         client = self._session.create_generated_order_client()
         body = OrderRecordDTOObject(
@@ -108,13 +140,7 @@ class OrderClient:
             lock_status=0,
             order_name=order_name.strip() if order_name and order_name.strip() else upper_id,
             upper_id=upper_id,
-            mission=[
-                MissionDTO(
-                    type="move",
-                    map_id=map_id,
-                    destination=destination_station_id,
-                )
-            ],
+            mission=missions,
         )
         response = require_response(
             await client.api.order.v1.add.by_default_missions.post(body),

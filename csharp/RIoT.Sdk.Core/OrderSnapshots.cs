@@ -13,11 +13,19 @@ public enum OrderLookupStatus
 
 /// <summary>
 /// Stable mission facts projected from a RIoT order response.
+/// The act-mission facts are raw values: a missing field reads back as null, never 0.
+/// Free-text fields such as resultStr are deliberately not projected.
 /// </summary>
 public sealed record OrderMissionSnapshot(
     string? Type,
     int? MapId,
-    int? Destination);
+    int? Destination)
+{
+    public int? ActionId { get; init; }
+    public int? ActionParam1 { get; init; }
+    public int? ActionParam2 { get; init; }
+    public int? ResultCode { get; init; }
+}
 
 /// <summary>
 /// Stable order facts exposed without leaking Kiota-generated types.

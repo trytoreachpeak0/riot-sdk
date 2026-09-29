@@ -15,9 +15,16 @@ class OrderLookupStatus(str, Enum):
 
 @dataclass(frozen=True, slots=True)
 class OrderMissionSnapshot:
+    """Stable mission facts. Act-mission facts are raw values: missing reads back as None,
+    never 0. Free-text fields such as resultStr are deliberately not projected."""
+
     type: str | None
     map_id: int | None
     destination: int | None
+    action_id: int | None = None
+    action_param1: int | None = None
+    action_param2: int | None = None
+    result_code: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
