@@ -17,6 +17,12 @@
 
 **2026-10-12 修订（riot-sdk#4）：C# 不再取原始流。**原先 C# 用 `SendPrimitiveAsync<Stream>`。Kiota 1.17.4 对 `Stream` 用 `ResponseHeadersRead` 发请求，`HttpClient.Timeout` 只管到响应头为止；失败响应也不进 `DrainAsync`，不会释放。探针实测：响应体在响应头后停住时，生成层 1 秒抛超时，这条路 6 秒后仍挂住；404、500 时响应没有释放。现在改走生成层 `GetAsync` 用的同一个 `SendAsync`，模型换成 Kiota 自带的 `UntypedNode`，再写回 `JsonDocument` 交给原来的 reader。超时、释放、错误映射与 Content-Type 处理因此都与生成层相同。Python 的 `bytes` 路径本来就由 httpx 整段读完再返回，没有这个问题，未改。
 
+这次修订带来的行为变化（C#）：
+
+- Content-Type 改按生成层处理。没有 Content-Type 时按「读不到响应体」报 `RiotApiException`；`text/html`、`text/plain`、`text/json` 等非 `application/json` 类型抛 Kiota 的 `InvalidOperationException`。修订前不看 Content-Type，一律按 JSON 解析。真 RIoT 这六个接口回的都是 `application/json; charset=UTF-8`（Round 43，2026-09-03），RIoT 升级后要重新确认。Python 不看 Content-Type，所以「合法 JSON、Content-Type 标错」这种情况两种语言结果不同。
+- 数字经无类型模型转写。整数字面量原样保留；进入 decimal 的数（`128.0`、指数写法 `1.28E2`）写回时一定带小数部分，按 int 读照旧失败，与 Python 一致。超出 decimal 范围的数降为 float 精度，超出 float 范围的数失败关闭。
+- `HttpClient.Timeout` 现在也覆盖响应体，持续慢速涓流的响应会比修订前更早超时。
+
 **Status**: accepted
 
 **Considered Options**: 改 `specs/imap.json` 让 Kiota 生成正确键名（解决不了 map 外层与非 ISO 时间戳，且卷入双端生成层）；产品代码走 `.Raw` 自己解析（`REQ-0309` 要求具名 Facade，且线格式会外溢）；手写完整 HTTP 旁路（重复鉴权与 URL 构造，正是 ADR-sdk-0006 要避免的）；只手写反序列化、URL 与鉴权仍走生成层（采纳）。

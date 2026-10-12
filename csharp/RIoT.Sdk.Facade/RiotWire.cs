@@ -45,7 +45,8 @@ internal static class RiotWire
     /// <remarks>
     /// No error mapping, as the generated <c>GetAsync</c> of these endpoints has none: a 4xx or
     /// 5xx is Kiota's <see cref="ApiException"/>. A body Kiota reads as nothing — no Content-Type,
-    /// or empty — is the empty-response failure below.
+    /// or empty — is the no-body failure below; a Content-Type other than JSON is Kiota's
+    /// <see cref="InvalidOperationException"/>, as for the generated read.
     /// </remarks>
     internal static async Task<T> ReadAsync<T>(
         IRequestAdapter adapter,
@@ -60,7 +61,8 @@ internal static class RiotWire
 
         if (body is null)
         {
-            throw new RiotApiException($"{operation} returned empty response.");
+            throw new RiotApiException(
+                $"{operation} returned no body that could be read: empty, or without a Content-Type.");
         }
 
         using var document = ToJsonDocument(body, operation);
@@ -84,9 +86,13 @@ internal static class RiotWire
     /// written against <see cref="JsonElement"/>.
     /// </summary>
     /// <remarks>
-    /// Numbers keep their value and, for decimals, their scale: Kiota reads a number as the first
-    /// of int, long, decimal, float, double that holds it, so <c>128.0</c> comes back as
-    /// <c>128.0</c> and still fails an int read. A number beyond decimal's range (about 7.9e28)
+    /// Numbers keep their value: Kiota reads a number as the first of int, long, decimal, float,
+    /// double that holds it. A plain integer literal is an int or a long and is written back as
+    /// one. Anything that reaches decimal was not an integer literal — <c>128.0</c>, or an
+    /// exponent such as <c>1.28E2</c> — and is written back with a fraction, so it still fails an
+    /// int read as it did when the reader parsed the raw body, and as Python's reader does
+    /// (riot-sdk#4 review S1). Kiota parses <c>1.28E2</c> to a decimal of scale 0, which would
+    /// otherwise be written as <c>128</c>. A number beyond decimal's range (about 7.9e28)
     /// is narrowed to float precision, and one beyond float's (about 3.4e38) becomes infinity,
     /// which has no JSON spelling: that read fails closed. Nothing on these endpoints comes near.
     /// </remarks>
@@ -135,7 +141,8 @@ internal static class RiotWire
                 writer.WriteNumberValue(number.GetValue());
                 break;
             case UntypedDecimal number:
-                writer.WriteNumberValue(number.GetValue());
+                var fraction = number.GetValue();
+                writer.WriteNumberValue(fraction.Scale == 0 ? fraction + 0.0m : fraction);
                 break;
             case UntypedFloat number when float.IsFinite(number.GetValue()):
                 writer.WriteNumberValue(number.GetValue());

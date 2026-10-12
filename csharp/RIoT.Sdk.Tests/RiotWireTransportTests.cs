@@ -202,6 +202,101 @@ public sealed class RiotWireTransportTests
     }
 
     /// <summary>
+    /// riot-sdk#4 review S1: an exponent is not an integer literal. Kiota reads <c>1.28E2</c> as a decimal of scale 0, and
+    /// written back as <c>128</c> it would pass an int read the raw reader refused. Python's reader refuses it too.
+    /// </summary>
+    [Theory]
+    [InlineData("1E2")]
+    [InlineData("1.0E1")]
+    [InlineData("1.5E1")]
+    [InlineData("1.28E2")]
+    [InlineData("1.0E7")]
+    public async Task An_exponent_is_still_not_an_int(string id)
+    {
+        string body =
+            """{"code":"0","message":"成功","result":[{"id":""" + id +
+            ""","s_node":1,"e_node":2,"cost":1,"sx":0,"sy":0,"ex":0,"ey":0}]}""";
+        await using RiotSession session = CreateSession(new RecordingHandler(_ => Json(body)));
+
+        RiotApiException error = await Assert.ThrowsAsync<RiotApiException>(() => session.Maps.ListEdgesAsync(25));
+
+        Assert.Contains("id", error.Message);
+    }
+
+    /// <summary>
+    /// Review S1, the same through <c>OptionalBool</c>: a flag spelled <c>1E2</c> is not the 0-or-1 spelling, so it falls back
+    /// to the default as the raw reader did, rather than reading as true.
+    /// </summary>
+    [Fact]
+    public async Task An_exponent_flag_falls_back_to_the_default()
+    {
+        const string body =
+            """{"code":"0","message":"成功","result":[{"id":1,"s_node":1,"e_node":2,"cost":1,"sx":0,"sy":0,"ex":0,"ey":0,"is_back_edge":1E2}]}""";
+        await using RiotSession session = CreateSession(new RecordingHandler(_ => Json(body)));
+
+        MapEdge edge = Assert.Single(await session.Maps.ListEdgesAsync(25));
+
+        Assert.False(edge.IsBackEdge);
+    }
+
+    /// <summary>Review R3: <c>"result":null</c> is "nothing here" on every read, as an absent result is.</summary>
+    [Theory]
+    [MemberData(nameof(Reads))]
+    public async Task A_null_result_is_nothing_here(string read)
+    {
+        await using RiotSession session = CreateSession(
+            new RecordingHandler(_ => Json("""{"code":"0","message":"成功","result":null}""")));
+
+        object value = read switch
+        {
+            "edges" => await session.Maps.ListEdgesAsync(25),
+            "stations" => await session.Maps.ListStationDetailsAsync(25),
+            "removedEdge" => await session.Maps.ListRemovedEdgesAsync(25),
+            "removedStation" => await session.Maps.ListRemovedStationsAsync(25),
+            "mapEdgeGroup/all" => await session.Maps.ListEdgeGroupsAsync(),
+            "route/" => await session.Tasks.ReadDynamicRouteCostPresenceAsync(),
+            _ => throw new ArgumentOutOfRangeException(nameof(read)),
+        };
+
+        if (value is DynamicRouteCostPresence presence)
+        {
+            Assert.Equal(new DynamicRouteCostPresence(false, 0), presence);
+        }
+        else
+        {
+            Assert.Empty((System.Collections.IEnumerable)value);
+        }
+    }
+
+    /// <summary>
+    /// Review R4: the caller's token reaches the read too. With no <c>HttpClient.Timeout</c> at all, a stalled body ends only
+    /// because the caller cancels.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Reads))]
+    public async Task A_stalled_body_ends_when_the_caller_cancels(string read)
+    {
+        RecordingHandler handler = new(_ => new HttpResponseMessage(HttpStatusCode.OK) { Content = new StalledContent() });
+        await using RiotSession session = new(
+            new RiotOptions { BaseUrl = "http://riot.test", CallApiKey = "test-key" },
+            new HttpClient(handler) { BaseAddress = new Uri("http://riot.test/"), Timeout = Timeout.InfiniteTimeSpan });
+        using CancellationTokenSource caller = new(TimeSpan.FromSeconds(1));
+
+        Exception error = await ThrowsWithinGuardAsync(() => read switch
+        {
+            "edges" => session.Maps.ListEdgesAsync(25, caller.Token),
+            "stations" => session.Maps.ListStationDetailsAsync(25, caller.Token),
+            "removedEdge" => session.Maps.ListRemovedEdgesAsync(25, caller.Token),
+            "removedStation" => session.Maps.ListRemovedStationsAsync(25, caller.Token),
+            "mapEdgeGroup/all" => session.Maps.ListEdgeGroupsAsync(caller.Token),
+            "route/" => session.Tasks.ReadDynamicRouteCostPresenceAsync(caller.Token),
+            _ => throw new ArgumentOutOfRangeException(nameof(read)),
+        });
+
+        Assert.IsAssignableFrom<OperationCanceledException>(error);
+    }
+
+    /// <summary>
     /// Beyond float's range Kiota's untyped model holds infinity, which has no JSON spelling. The read fails closed as a
     /// RIoT failure rather than escaping as the writer's ArgumentException.
     /// </summary>
