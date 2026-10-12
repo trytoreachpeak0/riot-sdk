@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.Kiota.Abstractions;
+using Microsoft.Kiota.Abstractions.Serialization;
 using RIoT.Sdk.Core;
 
 namespace RIoT.Sdk.Facade;
@@ -20,6 +21,15 @@ namespace RIoT.Sdk.Facade;
 /// (<see cref="RequestInformation"/> straight off the generated request builders) and read the
 /// body here. Everything in this file is internal: the wire format must not reach product code.
 /// </para>
+/// <para>
+/// Only the parse is replaced, never the request. The body comes through the same
+/// <c>SendAsync</c> the generated <c>GetAsync</c> uses, with Kiota's own untyped model, so the
+/// timeout, the release of the response, error mapping and Content-Type handling are the
+/// generated layer's. riot-sdk#4: the earlier <c>SendPrimitiveAsync&lt;Stream&gt;</c> sent with
+/// <c>ResponseHeadersRead</c>, so <c>HttpClient.Timeout</c> stopped at the headers and a stalled
+/// body hung; and a failed response was never released, because Kiota does not drain for
+/// <c>Stream</c>.
+/// </para>
 /// </remarks>
 /// <remarks>
 /// Named for RIoT rather than for imap because the task module has one endpoint with the same
@@ -32,6 +42,12 @@ internal static class RiotWire
     /// Sends a prepared GET, validates the ResponseMsg envelope (ADR-sdk-0005), and hands the
     /// <c>result</c> element to <paramref name="mapResult"/> while the document is still alive.
     /// </summary>
+    /// <remarks>
+    /// No error mapping, as the generated <c>GetAsync</c> of these endpoints has none: a 4xx or
+    /// 5xx is Kiota's <see cref="ApiException"/>. A body Kiota reads as nothing — no Content-Type,
+    /// or empty — is the no-body failure below; a Content-Type other than JSON is Kiota's
+    /// <see cref="InvalidOperationException"/>, as for the generated read.
+    /// </remarks>
     internal static async Task<T> ReadAsync<T>(
         IRequestAdapter adapter,
         RequestInformation requestInfo,
@@ -39,34 +55,106 @@ internal static class RiotWire
         Func<JsonElement, T> mapResult,
         CancellationToken cancellationToken)
     {
-        var stream = await adapter
-            .SendPrimitiveAsync<Stream>(requestInfo, cancellationToken: cancellationToken)
+        var body = await adapter
+            .SendAsync(requestInfo, UntypedNode.CreateFromDiscriminatorValue, default, cancellationToken)
             .ConfigureAwait(false);
 
-        if (stream is null)
+        if (body is null)
         {
-            throw new RiotApiException($"{operation} returned empty response.");
+            throw new RiotApiException(
+                $"{operation} returned no body that could be read: empty, or without a Content-Type.");
         }
 
-        await using (stream.ConfigureAwait(false))
+        using var document = ToJsonDocument(body, operation);
+        var root = document.RootElement;
+        if (root.ValueKind != JsonValueKind.Object)
         {
-            using var document = await JsonDocument
-                .ParseAsync(stream, cancellationToken: cancellationToken)
-                .ConfigureAwait(false);
+            throw new RiotApiException(
+                $"{operation} returned a {root.ValueKind} body, expected a ResponseMsg object.");
+        }
 
-            var root = document.RootElement;
-            if (root.ValueKind != JsonValueKind.Object)
-            {
-                throw new RiotApiException(
-                    $"{operation} returned a {root.ValueKind} body, expected a ResponseMsg object.");
-            }
+        RiotBusinessResponse.EnsureSuccess(
+            OptionalString(root, "code"),
+            OptionalString(root, "message"));
 
-            RiotBusinessResponse.EnsureSuccess(
-                OptionalString(root, "code"),
-                OptionalString(root, "message"));
+        return mapResult(
+            root.TryGetProperty("result", out var result) ? result : default);
+    }
 
-            return mapResult(
-                root.TryGetProperty("result", out var result) ? result : default);
+    /// <summary>
+    /// Writes the untyped tree back out as JSON for the readers below, which predate it and are
+    /// written against <see cref="JsonElement"/>.
+    /// </summary>
+    /// <remarks>
+    /// Numbers keep their value: Kiota reads a number as the first of int, long, decimal, float,
+    /// double that holds it. A plain integer literal is an int or a long and is written back as
+    /// one. Anything that reaches decimal was not an integer literal — <c>128.0</c>, or an
+    /// exponent such as <c>1.28E2</c> — and is written back with a fraction, so it still fails an
+    /// int read as it did when the reader parsed the raw body, and as Python's reader does
+    /// (riot-sdk#4 review S1). Kiota parses <c>1.28E2</c> to a decimal of scale 0, which would
+    /// otherwise be written as <c>128</c>. A number beyond decimal's range (about 7.9e28)
+    /// is narrowed to float precision, and one beyond float's (about 3.4e38) becomes infinity,
+    /// which has no JSON spelling: that read fails closed. Nothing on these endpoints comes near.
+    /// </remarks>
+    private static JsonDocument ToJsonDocument(UntypedNode node, string operation)
+    {
+        var buffer = new System.Buffers.ArrayBufferWriter<byte>();
+        using (var writer = new Utf8JsonWriter(buffer))
+        {
+            Write(writer, node, operation);
+        }
+
+        return JsonDocument.Parse(buffer.WrittenMemory);
+    }
+
+    private static void Write(Utf8JsonWriter writer, UntypedNode node, string operation)
+    {
+        switch (node)
+        {
+            case UntypedObject obj:
+                writer.WriteStartObject();
+                foreach (var (key, value) in obj.GetValue())
+                {
+                    writer.WritePropertyName(key);
+                    Write(writer, value, operation);
+                }
+                writer.WriteEndObject();
+                break;
+            case UntypedArray array:
+                writer.WriteStartArray();
+                foreach (var item in array.GetValue())
+                {
+                    Write(writer, item, operation);
+                }
+                writer.WriteEndArray();
+                break;
+            case UntypedString text when text.GetValue() is { } value:
+                writer.WriteStringValue(value);
+                break;
+            case UntypedBoolean flag:
+                writer.WriteBooleanValue(flag.GetValue());
+                break;
+            case UntypedInteger number:
+                writer.WriteNumberValue(number.GetValue());
+                break;
+            case UntypedLong number:
+                writer.WriteNumberValue(number.GetValue());
+                break;
+            case UntypedDecimal number:
+                var fraction = number.GetValue();
+                writer.WriteNumberValue(fraction.Scale == 0 ? fraction + 0.0m : fraction);
+                break;
+            case UntypedFloat number when float.IsFinite(number.GetValue()):
+                writer.WriteNumberValue(number.GetValue());
+                break;
+            case UntypedDouble number when double.IsFinite(number.GetValue()):
+                writer.WriteNumberValue(number.GetValue());
+                break;
+            case UntypedFloat or UntypedDouble:
+                throw new RiotApiException($"{operation} returned a number beyond the range the SDK reads.");
+            default:
+                writer.WriteNullValue();
+                break;
         }
     }
 
