@@ -86,7 +86,7 @@ async def test_get_vehicle_execution_facts_returns_vehicle_and_task_facts() -> N
     {
       "vehicle":{"movementState":"MT_FINISHED","controlState":"CONTROL_STATE_OK",
         "emergencyState":"OK","breakSwitchState":"MOVABLE",
-        "locationState":"LOCATION_STATE_RUNNING","speed":0},
+        "locationState":"LOCATION_STATE_RUNNING","speed":0,"mode":"MODE_MANUAL"},
       "vehicleTaskInfo":{"key":"VEHICLE-1","procState":"IDLE",
         "processingOrder":false,"enable":true,"integrationLevel":"ON_LINE"}
     }
@@ -108,7 +108,35 @@ async def test_get_vehicle_execution_facts_returns_vehicle_and_task_facts() -> N
     assert facts.processing_order is False
     assert facts.enable is True
     assert facts.integration_level == "ON_LINE"
+    assert facts.mode == "MODE_MANUAL"
     assert len(requests) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("mode_member", "expected"),
+    [
+        ("", None),
+        (',"mode":null', None),
+        (',"mode":"MODE_REMOTE"', None),
+        (',"mode":"UNKNOWN"', "UNKNOWN"),
+    ],
+)
+async def test_get_vehicle_execution_facts_reads_absent_or_unknown_mode(
+    mode_member: str, expected: str | None
+) -> None:
+    # control-server#639: a consumer requires MODE_AUTO, so anything else must not read like a real mode.
+    body = (
+        '{"vehicle":{"movementState":"MT_NA"' + mode_member + "},"
+        '"vehicleTaskInfo":{"key":"VEHICLE-1","procState":"IDLE"}}'
+    )
+    facts, _ = await _read(
+        "/api/task/v1/task/getVehicleInfo/VEHICLE-1",
+        body,
+        lambda session: session.tasks.get_vehicle_execution_facts("VEHICLE-1"),
+    )
+    assert facts.movement_state == "MT_NA"
+    assert facts.mode == expected
 
 
 @pytest.mark.asyncio

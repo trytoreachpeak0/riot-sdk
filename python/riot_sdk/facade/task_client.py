@@ -142,6 +142,7 @@ class TaskClient:
             processing_order=task.processing_order,
             enable=task.enable,
             integration_level=_enum_text(task.integration_level),
+            mode=_enum_text(vehicle.mode),
         )
 
     async def get_route_cost(

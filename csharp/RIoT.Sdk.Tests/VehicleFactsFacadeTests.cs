@@ -76,7 +76,7 @@ public sealed class VehicleFactsFacadeTests
                 {
                   "vehicle":{"movementState":"MT_FINISHED","controlState":"CONTROL_STATE_OK",
                     "emergencyState":"OK","breakSwitchState":"MOVABLE",
-                    "locationState":"LOCATION_STATE_RUNNING","speed":0},
+                    "locationState":"LOCATION_STATE_RUNNING","speed":0,"mode":"MODE_MANUAL"},
                   "vehicleTaskInfo":{"key":"VEHICLE-1","procState":"IDLE",
                     "processingOrder":false,"enable":true,"integrationLevel":"ON_LINE"}
                 }
@@ -97,7 +97,43 @@ public sealed class VehicleFactsFacadeTests
         Assert.Equal(false, facts.ProcessingOrder);
         Assert.Equal(true, facts.Enable);
         Assert.Equal("ON_LINE", facts.IntegrationLevel);
+        Assert.Equal("MODE_MANUAL", facts.Mode);
         Assert.Equal(1, handler.CallCount);
+    }
+
+    /// <summary>
+    /// control-server#639: a consumer proves standstill by requiring MODE_AUTO, so a mode RIoT left out or sent as a value the
+    /// generated enum does not know must reach it as null, never as a default that reads like a real mode.
+    /// </summary>
+    [Theory]
+    [InlineData("")]
+    [InlineData(",\"mode\":null")]
+    [InlineData(",\"mode\":\"MODE_REMOTE\"")]
+    public async Task GetVehicleExecutionFacts_reports_absent_or_unknown_mode_as_null(string modeMember)
+    {
+        RecordingHandler handler = new(_ => JsonResponse(
+            "{\"vehicle\":{\"movementState\":\"MT_NA\"" + modeMember + "}," +
+            "\"vehicleTaskInfo\":{\"key\":\"VEHICLE-1\",\"procState\":\"IDLE\"}}"));
+        await using RiotSession session = CreateSession(handler);
+
+        VehicleExecutionFacts facts = await session.Tasks.GetVehicleExecutionFactsAsync("VEHICLE-1");
+
+        Assert.Equal("MT_NA", facts.MovementState);
+        Assert.Null(facts.Mode);
+    }
+
+    [Fact]
+    public async Task GetVehicleExecutionFacts_passes_the_unknown_mode_member_through()
+    {
+        RecordingHandler handler = new(_ => JsonResponse("""
+            {"vehicle":{"movementState":"MT_NA","mode":"UNKNOWN"},
+             "vehicleTaskInfo":{"key":"VEHICLE-1","procState":"IDLE"}}
+            """));
+        await using RiotSession session = CreateSession(handler);
+
+        VehicleExecutionFacts facts = await session.Tasks.GetVehicleExecutionFactsAsync("VEHICLE-1");
+
+        Assert.Equal("UNKNOWN", facts.Mode);
     }
 
     [Theory]

@@ -128,7 +128,8 @@ public sealed class TaskClient
             response.VehicleTaskInfo.ProcState?.ToString(),
             response.VehicleTaskInfo.ProcessingOrder,
             response.VehicleTaskInfo.Enable,
-            response.VehicleTaskInfo.IntegrationLevel?.ToString());
+            response.VehicleTaskInfo.IntegrationLevel?.ToString(),
+            response.Vehicle.Mode?.ToString());
     }
 
     /// <summary>

@@ -31,3 +31,5 @@ class VehicleExecutionFacts:
     processing_order: bool | None
     enable: bool | None
     integration_level: str | None
+    # MODE_AUTO / MODE_MANUAL / UNKNOWN; None when absent or not a known value (control-server#639).
+    mode: str | None
