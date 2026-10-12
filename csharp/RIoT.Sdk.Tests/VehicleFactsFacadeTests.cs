@@ -1,7 +1,9 @@
 using System.Net;
 using System.Text;
 using RIoT.Sdk.Core;
+using Microsoft.Kiota.Abstractions.Serialization;
 using RIoT.Sdk.Facade;
+using RIoT.Sdk.Generated.TaskApi.Models;
 
 namespace RIoT.Sdk.Tests;
 
@@ -243,6 +245,32 @@ public sealed class VehicleFactsFacadeTests
 
         Assert.Equal("MT_NA", facts.MovementState);
         Assert.Null(facts.Mode);
+    }
+
+    /// <summary>
+    /// riot-sdk#3 third review L2: the strict parse replaces the generated entries for <c>vehicle</c> and <c>mode</c> by key. If
+    /// a regenerated spec renamed either, the replacement would silently add an unused key and every mode would read null.
+    /// This names the cause directly: both keys are in the generated tables, and the strict tables have exactly the same keys.
+    /// </summary>
+    [Fact]
+    public void The_strict_parse_replaces_keys_the_generated_models_have()
+    {
+        IDictionary<string, Action<IParseNode>> allInfo = new VehicleAllInfo().GetFieldDeserializers();
+        IDictionary<string, Action<IParseNode>> vehicle = new Vehicle().GetFieldDeserializers();
+
+        Assert.True(allInfo.ContainsKey("vehicle"), "VehicleAllInfo no longer deserializes a \"vehicle\" member.");
+        Assert.True(vehicle.ContainsKey("mode"), "Vehicle no longer deserializes a \"mode\" member.");
+        Assert.Equal(allInfo.Keys.Order(StringComparer.Ordinal), StrictKeys("StrictModeVehicleAllInfo"));
+        Assert.Equal(vehicle.Keys.Order(StringComparer.Ordinal), StrictKeys("StrictModeVehicle"));
+    }
+
+    /// <summary>The field keys of one of the facade's internal strict models, found by name (they are not public API).</summary>
+    private static IEnumerable<string> StrictKeys(string typeName)
+    {
+        Type type = typeof(RiotSession).Assembly.GetType("RIoT.Sdk.Facade." + typeName)
+            ?? throw new InvalidOperationException($"RIoT.Sdk.Facade.{typeName} is gone; update this test with the parse it replaced.");
+        IParsable model = (IParsable)Activator.CreateInstance(type, nonPublic: true)!;
+        return model.GetFieldDeserializers().Keys.Order(StringComparer.Ordinal);
     }
 
     /// <summary>The three declared values pass through exactly as RIoT spells them.</summary>

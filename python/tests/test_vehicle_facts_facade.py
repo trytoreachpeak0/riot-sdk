@@ -260,3 +260,17 @@ async def test_get_vehicle_execution_facts_rejects_mismatched_task_key() -> None
             lambda session: session.tasks.get_vehicle_execution_facts("VEHICLE-1"),
         )
     assert caught.value.business_code == "vehicle-key-mismatch"
+
+def test_strict_parse_replaces_keys_the_generated_models_have() -> None:
+    # riot-sdk#3 third review L2: the strict parse replaces the generated "vehicle" and "mode" entries by key. A renamed key
+    # would silently add an unused one and every mode would read None; this names the cause instead.
+    from riot_sdk.facade.strict_mode_vehicle_info import StrictModeVehicle, StrictModeVehicleAllInfo
+    from riot_sdk.generated.task.models.vehicle import Vehicle
+    from riot_sdk.generated.task.models.vehicle_all_info import VehicleAllInfo
+
+    all_info = VehicleAllInfo().get_field_deserializers()
+    vehicle = Vehicle().get_field_deserializers()
+    assert "vehicle" in all_info, 'VehicleAllInfo no longer deserializes a "vehicle" member.'
+    assert "mode" in vehicle, 'Vehicle no longer deserializes a "mode" member.'
+    assert set(StrictModeVehicleAllInfo().get_field_deserializers()) == set(all_info)
+    assert set(StrictModeVehicle().get_field_deserializers()) == set(vehicle)
