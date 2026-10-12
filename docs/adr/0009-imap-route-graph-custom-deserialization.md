@@ -1,6 +1,6 @@
 # imap 路网五端点自定义反序列化，URL 与鉴权仍走 Kiota
 
-`edges`／`stations`／`removedEdge`／`removedStation`／`mapEdgeGroup/all` 五个只读端点的响应体由 SDK 自己解析（`ImapWire` / `imap_wire`），不经 Kiota 生成模型；请求 URL 与鉴权仍由生成层的 `ToGetRequestInformation()` 构造，body 用 `SendPrimitiveAsync<Stream>`／`send_primitive_async(..., "bytes", ...)` 取原始字节。解析结果是 `RIoT.Sdk.Core` 里的具名领域类型，线格式不外溢到产品代码。这**收窄了 ADR-sdk-0006**「不采用长期手写 imap HTTP 旁路」的适用范围：手写的只是这五个端点的反序列化，不是 HTTP 旁路，Map/Station 的既有 `ListMapsAsync`／`ListStationsAsync` 一字未动，仍走生成模型。
+`edges`／`stations`／`removedEdge`／`removedStation`／`mapEdgeGroup/all` 五个只读端点的响应体由 SDK 自己解析（`ImapWire` / `imap_wire`），不经 Kiota 生成模型；请求 URL 与鉴权仍由生成层的 `ToGetRequestInformation()` 构造，body 由生成层读完后交给 SDK 解析：C# 用 `SendAsync(..., UntypedNode.CreateFromDiscriminatorValue, ...)`，Python 用 `send_primitive_async(..., "bytes", ...)`。解析结果是 `RIoT.Sdk.Core` 里的具名领域类型，线格式不外溢到产品代码。这**收窄了 ADR-sdk-0006**「不采用长期手写 imap HTTP 旁路」的适用范围：手写的只是这五个端点的反序列化，不是 HTTP 旁路，Map/Station 的既有 `ListMapsAsync`／`ListStationsAsync` 一字未动，仍走生成模型。
 
 理由是实测：Round 43 在生产 RIoT（`172.19.206.222:8888`，mapId 25）逐条比对，`riot_swagger/imap.json` 与实际线格式对不上，**且不是改 spec 能补齐的**。四处：
 
@@ -14,6 +14,8 @@
 **代价，如实记：**线格式的知识现在有两处——`specs/imap.json`（spec 的说法）与这五个 reader（现场的说法），两者不一致且不会自动对齐。RIoT 升级改了键名时，编译不会失败，测试也不会红，除非有人重跑一轮 Round 43 式的实采。缓解措施是三条：reader 对必需字段 **fail-closed**（读不到就抛 `RiotApiException`，不静默返回空图或跳过元素——静默会让调用方在一张缺边的图上派车）；两个 spelling 都接受（现场的与 spec 的）；测试夹具是 Round 43 的**逐字响应体**，不是手编的样例。
 
 **`removedEdge`／`removedStation` 的形状未经实测。**Round 43 在 map25 上两者都返回 `result: []`，元素形状取自 spec 的 `MapRemovedEdge对象`／`MapRemovedStation对象` 组件，从未见过非空。`mapEdgeGroup/all` 的空形态同样未见——map25 一个边组都没有，全 RIoT 的边组都属于别的 Map，所以空数组与空对象都按「没有」处理，非空数组则 fail-closed。
+
+**2026-10-12 修订（riot-sdk#4）：C# 不再取原始流。**原先 C# 用 `SendPrimitiveAsync<Stream>`。Kiota 1.17.4 对 `Stream` 用 `ResponseHeadersRead` 发请求，`HttpClient.Timeout` 只管到响应头为止；失败响应也不进 `DrainAsync`，不会释放。探针实测：响应体在响应头后停住时，生成层 1 秒抛超时，这条路 6 秒后仍挂住；404、500 时响应没有释放。现在改走生成层 `GetAsync` 用的同一个 `SendAsync`，模型换成 Kiota 自带的 `UntypedNode`，再写回 `JsonDocument` 交给原来的 reader。超时、释放、错误映射与 Content-Type 处理因此都与生成层相同。Python 的 `bytes` 路径本来就由 httpx 整段读完再返回，没有这个问题，未改。
 
 **Status**: accepted
 
