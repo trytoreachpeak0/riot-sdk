@@ -122,18 +122,97 @@ public sealed class VehicleFactsFacadeTests
         Assert.Null(facts.Mode);
     }
 
+    /// <summary>
+    /// riot-sdk#3 review M1: MODE_AUTO itself, off a real response. The body is behaviour lab Round 6
+    /// <c>B2-getVehicleInfo-full.json</c> trimmed (identity replaced, the large nested objects dropped), without the UTF-8 BOM
+    /// the lab file carries (that came from writing the file). control-server#639 proves standstill on this value, so
+    /// projecting it wrongly would stop every vehicle.
+    /// </summary>
     [Fact]
-    public async Task GetVehicleExecutionFacts_passes_the_unknown_mode_member_through()
+    public async Task GetVehicleExecutionFacts_reads_mode_auto_off_a_real_response()
     {
-        RecordingHandler handler = new(_ => JsonResponse("""
-            {"vehicle":{"movementState":"MT_NA","mode":"UNKNOWN"},
-             "vehicleTaskInfo":{"key":"VEHICLE-1","procState":"IDLE"}}
-            """));
+        RecordingHandler handler = new(_ => JsonResponse(Round6VehicleInfo));
         await using RiotSession session = CreateSession(handler);
 
         VehicleExecutionFacts facts = await session.Tasks.GetVehicleExecutionFactsAsync("VEHICLE-1");
 
-        Assert.Equal("UNKNOWN", facts.Mode);
+        Assert.Equal("MODE_AUTO", facts.Mode);
+        Assert.Equal("MT_FINISHED", facts.MovementState);
+        Assert.Equal("MOVABLE", facts.BreakSwitchState);
+        Assert.Equal(0d, facts.Speed);
+        Assert.Equal("OFF_LINE", facts.IntegrationLevel);
+        Assert.Equal(1, handler.CallCount);
+    }
+
+    /// <summary>
+    /// riot-sdk#3: the read now takes the raw body instead of the generated <c>GetAsync</c>, so it must fail the way that did --
+    /// control-server sorts read failures by exception type. Each failure is sent to both and the types compared.
+    /// </summary>
+    [Theory]
+    [InlineData(HttpStatusCode.Unauthorized, "{}")]
+    [InlineData(HttpStatusCode.ServiceUnavailable, "{}")]
+    [InlineData(HttpStatusCode.OK, "not json")]
+    public async Task GetVehicleExecutionFacts_fails_as_the_generated_read_did(HttpStatusCode status, string body)
+    {
+        RecordingHandler handler = new(_ => new HttpResponseMessage(status)
+        {
+            Content = new StringContent(body, Encoding.UTF8, "application/json"),
+        });
+        await using RiotSession session = CreateSession(handler);
+
+        Exception generated = await Assert.ThrowsAnyAsync<Exception>(
+            () => session.Tasks.Raw.Api.Task.V1.Task.GetVehicleInfo["VEHICLE-1"].GetAsync());
+        Exception facade = await Assert.ThrowsAnyAsync<Exception>(
+            () => session.Tasks.GetVehicleExecutionFactsAsync("VEHICLE-1"));
+
+        Assert.Equal(generated.GetType(), facade.GetType());
+    }
+
+    /// <summary>The three declared values pass through exactly as RIoT spells them.</summary>
+    [Theory]
+    [InlineData("MODE_AUTO")]
+    [InlineData("MODE_MANUAL")]
+    [InlineData("UNKNOWN")]
+    public async Task GetVehicleExecutionFacts_passes_each_declared_mode_through(string mode)
+    {
+        RecordingHandler handler = new(_ => JsonResponse(
+            "{\"vehicle\":{\"movementState\":\"MT_NA\",\"mode\":\"" + mode + "\"}," +
+            "\"vehicleTaskInfo\":{\"key\":\"VEHICLE-1\",\"procState\":\"IDLE\"}}"));
+        await using RiotSession session = CreateSession(handler);
+
+        VehicleExecutionFacts facts = await session.Tasks.GetVehicleExecutionFactsAsync("VEHICLE-1");
+
+        Assert.Equal(mode, facts.Mode);
+    }
+
+    /// <summary>
+    /// riot-sdk#3 review S1: a value not spelled exactly as declared is no mode. The generated enum reader took
+    /// <c>"0"</c>, <c>" 0"</c>, <c>"mode_auto"</c> and <c>" MODE_AUTO"</c> as MODE_AUTO, <c>"3"</c> and <c>"-1"</c> as
+    /// themselves and <c>"MODE_AUTO,MODE_MANUAL"</c> as MODE_MANUAL; Python gives None for every one of them, and so does C#
+    /// now. The same table is in python/tests/test_vehicle_facts_facade.py.
+    /// </summary>
+    [Theory]
+    [InlineData("0")]
+    [InlineData(" 0")]
+    [InlineData("mode_auto")]
+    [InlineData(" MODE_AUTO")]
+    [InlineData("MODE_AUTO ")]
+    [InlineData("Mode_Auto")]
+    [InlineData("3")]
+    [InlineData("-1")]
+    [InlineData("MODE_AUTO,MODE_MANUAL")]
+    [InlineData("")]
+    public async Task GetVehicleExecutionFacts_reads_a_mode_not_spelled_as_declared_as_null(string mode)
+    {
+        RecordingHandler handler = new(_ => JsonResponse(
+            "{\"vehicle\":{\"movementState\":\"MT_NA\",\"mode\":\"" + mode + "\"}," +
+            "\"vehicleTaskInfo\":{\"key\":\"VEHICLE-1\",\"procState\":\"IDLE\"}}"));
+        await using RiotSession session = CreateSession(handler);
+
+        VehicleExecutionFacts facts = await session.Tasks.GetVehicleExecutionFactsAsync("VEHICLE-1");
+
+        Assert.Equal("MT_NA", facts.MovementState);
+        Assert.Null(facts.Mode);
     }
 
     [Theory]
@@ -175,6 +254,9 @@ public sealed class VehicleFactsFacadeTests
     {
         Content = new StringContent(body, Encoding.UTF8, "application/json"),
     };
+
+    /// <summary>Behaviour lab Round 6 <c>B2-getVehicleInfo-full.json</c>, trimmed; see the test that uses it.</summary>
+    private const string Round6VehicleInfo = "{\"vehicle\":{\"actionState\":\"AT_NA\",\"actionTaskNo\":0,\"agvInfoState\":\"NORMAL\",\"aliveState\":true,\"battery\":35,\"batteryState\":\"NO_CHARGE\",\"breakSwitchState\":\"MOVABLE\",\"confidence\":92,\"connected\":true,\"connectedTimestamp\":1784507855064,\"controlState\":\"CONTROL_STATE_OK\",\"curCheckPointNo\":0,\"curPathNo\":0,\"currentNode\":1,\"currentStation\":1,\"emergencyState\":\"OK\",\"faultCodes\":\"11322,11324,212416,211416\",\"faultCodesList\":[],\"firstReportData\":true,\"fleetMode\":\"FLEET_MODE_OFFLINE\",\"freshState\":1,\"hardWareErrorCode\":0,\"hardwareState\":\"H_STATE_OK\",\"key\":\"VEHICLE-1\",\"lastErrorCode\":0,\"lastReportTime\":1784514379092,\"length\":925,\"loadHandlingDevices\":[],\"loadState\":0,\"locationState\":\"LOCATION_STATE_RUNNING\",\"mode\":\"MODE_AUTO\",\"motorExceptionState\":\"NORMAL\",\"moveTaskNo\":2,\"movementState\":\"MT_FINISHED\",\"noNode\":false,\"noStation\":false,\"orientationAngle\":-1.578,\"originalLength\":925,\"originalWidth\":622,\"paused\":false,\"powerMode\":\"POWER_MODE_FULLER\",\"precisePosition\":{\"x\":128.0,\"y\":-539.0},\"productKey\":\"standard.oasis.300ul\",\"routingGroup\":\"EXECUTE_FREE\",\"running\":false,\"speed\":0.0,\"startPauseTime\":0,\"state\":\"IDLE\",\"status\":1,\"vehicleId\":40,\"width\":622},\"vehicleTaskInfo\":{\"batteryMaintenanceTime\":1762328282203,\"enable\":false,\"handlePauseTime\":0,\"integrationLevel\":\"OFF_LINE\",\"integrationLevelTime\":0,\"key\":\"VEHICLE-1\",\"lastExecuteOrderTimestamp\":0,\"procState\":\"IDLE\",\"processingOrder\":false,\"routeProgressIndex\":-1}}";
 
     private sealed class RecordingHandler(
         Func<HttpRequestMessage, HttpResponseMessage> responseFactory) : HttpMessageHandler

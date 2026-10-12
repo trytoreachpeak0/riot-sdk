@@ -20,8 +20,8 @@ public sealed record VehicleCard(
 /// Stable projection of the diagnostic vehicle and vehicle-task response.
 /// </summary>
 /// <remarks>
-/// <see cref="Mode"/> is the vehicle's <c>mode</c> (<c>MODE_AUTO</c>, <c>MODE_MANUAL</c> or <c>UNKNOWN</c>); null when RIoT left
-/// it out or sent a value the generated enum does not know. A manually driven vehicle can move with no movement task at all
+/// <see cref="Mode"/> is the vehicle's <c>mode</c> when RIoT sent exactly <c>MODE_AUTO</c>, <c>MODE_MANUAL</c> or <c>UNKNOWN</c>
+/// (case-sensitive, no surrounding space, no number); null when it left the field out, sent null, or sent anything else. A manually driven vehicle can move with no movement task at all
 /// (control-server#639), so a consumer proving standstill should require <c>MODE_AUTO</c> rather than reject <c>MODE_MANUAL</c>.
 /// </remarks>
 public sealed record VehicleExecutionFacts(

@@ -112,6 +112,75 @@ async def test_get_vehicle_execution_facts_returns_vehicle_and_task_facts() -> N
     assert len(requests) == 1
 
 
+# Behaviour lab Round 6 B2-getVehicleInfo-full.json, trimmed (identity replaced, the large nested objects dropped).
+ROUND6_VEHICLE_INFO = (
+    '{"vehicle":{"actionState":"AT_NA","actionTaskNo":0,"agvInfoState":"NORMAL","aliveState":true,"battery":35,"batteryState":"NO_CHARGE","breakSwitchState":"MOVABLE","confidence":92,"connected":true,"connectedTimestamp":1784507855064,"controlState":"CONTROL_STATE_OK","curCheckPointNo":0,"curPathNo":0,"currentNode":1,"currentStation":1,"emergencyState":"OK","faultCodes":"11322,11324,212416,211416","faultCodesList":[],"firstReportData":true,"fleetMode":"FLEET_MODE_OFFLINE","freshState":1,"hardWareErrorCode":0,"hardwareState":"H_STATE_OK","key":"VEHICLE-1","lastErrorCode":0,"lastReportTime":1784514379092,"length":925,"loadHandlingDevices":[],"loadState":0,"locationState":"LOCATION_STATE_RUNNING","mode":"MODE_AUTO","motorExceptionState":"NORMAL","moveTaskNo":2,"movementState":"MT_FINISHED","noNode":false,"noStation":false,"orientationAngle":-1.578,"originalLength":925,"originalWidth":622,"paused":false,"powerMode":"POWER_MODE_FULLER","precisePosition":{"x":128.0,"y":-539.0},"productKey":"standard.oasis.300ul","routingGroup":"EXECUTE_FREE","running":false,"speed":0.0,"startPauseTime":0,"state":"IDLE","status":1,"vehicleId":40,"width":622},"vehicleTaskInfo":{"batteryMaintenanceTime":1762328282203,"enable":false,"handlePauseTime":0,"integrationLevel":"OFF_LINE","integrationLevelTime":0,"key":"VEHICLE-1","lastExecuteOrderTimestamp":0,"procState":"IDLE","processingOrder":false,"routeProgressIndex":-1}}'
+)
+
+
+@pytest.mark.asyncio
+async def test_get_vehicle_execution_facts_reads_mode_auto_off_a_real_response() -> None:
+    # riot-sdk#3 review M1: control-server#639 proves standstill on MODE_AUTO, so it must come through as spelled.
+    # Without the UTF-8 BOM the lab file carries: that came from writing the file, and Python's reader refuses it.
+    facts, requests = await _read(
+        "/api/task/v1/task/getVehicleInfo/VEHICLE-1",
+        ROUND6_VEHICLE_INFO,
+        lambda session: session.tasks.get_vehicle_execution_facts("VEHICLE-1"),
+    )
+    assert facts.mode == "MODE_AUTO"
+    assert facts.movement_state == "MT_FINISHED"
+    assert facts.break_switch_state == "MOVABLE"
+    assert facts.speed == 0
+    assert facts.integration_level == "OFF_LINE"
+    assert len(requests) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mode", ["MODE_AUTO", "MODE_MANUAL", "UNKNOWN"])
+async def test_get_vehicle_execution_facts_passes_each_declared_mode_through(mode: str) -> None:
+    body = (
+        '{"vehicle":{"movementState":"MT_NA","mode":"' + mode + '"},'
+        '"vehicleTaskInfo":{"key":"VEHICLE-1","procState":"IDLE"}}'
+    )
+    facts, _ = await _read(
+        "/api/task/v1/task/getVehicleInfo/VEHICLE-1",
+        body,
+        lambda session: session.tasks.get_vehicle_execution_facts("VEHICLE-1"),
+    )
+    assert facts.mode == mode
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "mode",
+    [
+        '0',
+        ' 0',
+        'mode_auto',
+        ' MODE_AUTO',
+        'MODE_AUTO ',
+        'Mode_Auto',
+        '3',
+        '-1',
+        'MODE_AUTO,MODE_MANUAL',
+        '',
+    ],
+)
+async def test_get_vehicle_execution_facts_reads_a_mode_not_spelled_as_declared_as_none(mode: str) -> None:
+    # riot-sdk#3 review S1: the same table as the C# test; both languages give None for every one of them.
+    body = (
+        '{"vehicle":{"movementState":"MT_NA","mode":"' + mode + '"},'
+        '"vehicleTaskInfo":{"key":"VEHICLE-1","procState":"IDLE"}}'
+    )
+    facts, _ = await _read(
+        "/api/task/v1/task/getVehicleInfo/VEHICLE-1",
+        body,
+        lambda session: session.tasks.get_vehicle_execution_facts("VEHICLE-1"),
+    )
+    assert facts.movement_state == "MT_NA"
+    assert facts.mode is None
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("mode_member", "expected"),
@@ -119,7 +188,6 @@ async def test_get_vehicle_execution_facts_returns_vehicle_and_task_facts() -> N
         ("", None),
         (',"mode":null', None),
         (',"mode":"MODE_REMOTE"', None),
-        (',"mode":"UNKNOWN"', "UNKNOWN"),
     ],
 )
 async def test_get_vehicle_execution_facts_reads_absent_or_unknown_mode(
