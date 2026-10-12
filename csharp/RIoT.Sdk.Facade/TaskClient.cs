@@ -93,6 +93,11 @@ public sealed class TaskClient
     /// GET /api/task/v1/task/getVehicleInfo/{deviceKey}.
     /// Returns the diagnostic vehicle and task halves as one identity-checked snapshot.
     /// </summary>
+    /// <remarks>
+    /// Sent exactly as the generated <c>GetAsync</c> sends it -- the same <c>SendAsync</c>, no error mapping -- so timeouts,
+    /// disposal, failures and their types are the generated read's. Only the parse differs: <see cref="StrictModeVehicleAllInfo"/>
+    /// reads <c>vehicle.mode</c> as the raw string instead of through the generated enum (riot-sdk#3 review S1).
+    /// </remarks>
     public async Task<VehicleExecutionFacts> GetVehicleExecutionFactsAsync(
         string deviceKey,
         CancellationToken cancellationToken = default)
@@ -100,8 +105,9 @@ public sealed class TaskClient
         ArgumentException.ThrowIfNullOrWhiteSpace(deviceKey);
 
         var client = _session.CreateGeneratedTaskClient();
-        var response = await client.Api.Task.V1.Task.GetVehicleInfo[deviceKey]
-            .GetAsync(cancellationToken: cancellationToken)
+        var requestInfo = client.Api.Task.V1.Task.GetVehicleInfo[deviceKey].ToGetRequestInformation();
+        var response = await _session.Adapter
+            .SendAsync(requestInfo, StrictModeVehicleAllInfo.CreateFromParseNode, default, cancellationToken)
             .ConfigureAwait(false);
         if (response?.Vehicle is null || response.VehicleTaskInfo is null)
         {
@@ -128,7 +134,8 @@ public sealed class TaskClient
             response.VehicleTaskInfo.ProcState?.ToString(),
             response.VehicleTaskInfo.ProcessingOrder,
             response.VehicleTaskInfo.Enable,
-            response.VehicleTaskInfo.IntegrationLevel?.ToString());
+            response.VehicleTaskInfo.IntegrationLevel?.ToString(),
+            StrictModeVehicle.ExactMode((response.Vehicle as StrictModeVehicle)?.RawMode));
     }
 
     /// <summary>
