@@ -15,6 +15,7 @@ from riot_sdk.core.dynamic_route_cost import DynamicRouteCostPresence
 from riot_sdk.core.route_cost import RouteCost
 from riot_sdk.core.vehicle_facts import VehicleCard, VehicleExecutionFacts
 from riot_sdk.facade import riot_wire
+from riot_sdk.facade.strict_mode_vehicle_info import StrictModeVehicleAllInfo, exact_mode
 from riot_sdk.generated.task.models.batch_vehicle_operation import BatchVehicleOperation
 from riot_sdk.generated.task.models.order_command_d_t_o_object import OrderCommandDTOObject
 from riot_sdk.generated.task.models.order_command_d_t_o_object_command_type import (
@@ -114,10 +115,14 @@ class TaskClient:
         if not device_key or not device_key.strip():
             raise ValueError("device_key is required")
 
+        # Sent as the generated get() sends it; only the parse differs (strict_mode_vehicle_info).
         client = self._session.create_generated_task_client()
-        response = await client.api.task.v1.task.get_vehicle_info.by_device_key(
+        request_info = client.api.task.v1.task.get_vehicle_info.by_device_key(
             device_key
-        ).get()
+        ).to_get_request_information()
+        response = await self._session.request_adapter.send_async(
+            request_info, StrictModeVehicleAllInfo, None
+        )
         if response is None or response.vehicle is None or response.vehicle_task_info is None:
             raise RiotApiException(
                 "getVehicleInfo returned a missing vehicle or vehicleTaskInfo.",
@@ -142,7 +147,7 @@ class TaskClient:
             processing_order=task.processing_order,
             enable=task.enable,
             integration_level=_enum_text(task.integration_level),
-            mode=_enum_text(vehicle.mode),
+            mode=exact_mode(getattr(vehicle, "raw_mode", None)),
         )
 
     async def get_route_cost(

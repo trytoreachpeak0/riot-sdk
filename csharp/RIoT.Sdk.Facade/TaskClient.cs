@@ -1,7 +1,4 @@
-using System.Text.Json;
-using Microsoft.Kiota.Abstractions.Serialization;
 using RIoT.Sdk.Core;
-using RIoT.Sdk.Generated.TaskApi.Models;
 
 namespace RIoT.Sdk.Facade;
 
@@ -97,9 +94,9 @@ public sealed class TaskClient
     /// Returns the diagnostic vehicle and task halves as one identity-checked snapshot.
     /// </summary>
     /// <remarks>
-    /// One request, read twice from the same bytes: the generated model for every field as before, and the raw
-    /// <c>vehicle.mode</c> string for <see cref="VehicleExecutionFacts.Mode"/> (see <see cref="ExactMode"/>). Sent without an
-    /// error mapping, exactly as the generated <c>GetAsync</c> sends it, so a failed request throws what it always threw.
+    /// Sent exactly as the generated <c>GetAsync</c> sends it -- the same <c>SendAsync</c>, no error mapping -- so timeouts,
+    /// disposal, failures and their types are the generated read's. Only the parse differs: <see cref="StrictModeVehicleAllInfo"/>
+    /// reads <c>vehicle.mode</c> as the raw string instead of through the generated enum (riot-sdk#3 review S1).
     /// </remarks>
     public async Task<VehicleExecutionFacts> GetVehicleExecutionFactsAsync(
         string deviceKey,
@@ -109,39 +106,9 @@ public sealed class TaskClient
 
         var client = _session.CreateGeneratedTaskClient();
         var requestInfo = client.Api.Task.V1.Task.GetVehicleInfo[deviceKey].ToGetRequestInformation();
-        var stream = await _session.Adapter
-            .SendPrimitiveAsync<Stream>(requestInfo, cancellationToken: cancellationToken)
+        var response = await _session.Adapter
+            .SendAsync(requestInfo, StrictModeVehicleAllInfo.CreateFromParseNode, default, cancellationToken)
             .ConfigureAwait(false);
-        byte[] body;
-        if (stream is null)
-        {
-            body = [];
-        }
-        else
-        {
-            await using (stream.ConfigureAwait(false))
-            {
-                using var buffer = new MemoryStream();
-                await stream.CopyToAsync(buffer, cancellationToken).ConfigureAwait(false);
-                body = buffer.ToArray();
-            }
-        }
-
-        VehicleAllInfo? response = null;
-        string? mode = null;
-        if (body.Length > 0)
-        {
-            using (var modelStream = new MemoryStream(body, writable: false))
-            {
-                var rootNode = await ParseNodeFactoryRegistry.DefaultInstance
-                    .GetRootParseNodeAsync("application/json", modelStream, cancellationToken)
-                    .ConfigureAwait(false);
-                response = rootNode.GetObjectValue(VehicleAllInfo.CreateFromDiscriminatorValue);
-            }
-
-            mode = ExactMode(body);
-        }
-
         if (response?.Vehicle is null || response.VehicleTaskInfo is null)
         {
             throw new RiotApiException(
@@ -168,44 +135,7 @@ public sealed class TaskClient
             response.VehicleTaskInfo.ProcessingOrder,
             response.VehicleTaskInfo.Enable,
             response.VehicleTaskInfo.IntegrationLevel?.ToString(),
-            mode);
-    }
-
-    /// <summary>The three <c>mode</c> values RIoT's task API declares.</summary>
-    private static readonly string[] KnownModes = ["MODE_AUTO", "MODE_MANUAL", "UNKNOWN"];
-
-    /// <summary>
-    /// The raw <c>vehicle.mode</c> when it is exactly one of <see cref="KnownModes"/>, otherwise null.
-    /// </summary>
-    /// <remarks>
-    /// Not the generated enum: Kiota's <c>EnumHelpers.GetEnumValue</c> ends in a case-insensitive <c>Enum.TryParse</c> that also
-    /// takes numbers, so <c>"0"</c>, <c>" 0"</c>, <c>"mode_auto"</c> and <c>" MODE_AUTO"</c> came out as MODE_AUTO, <c>"3"</c> as
-    /// <c>"3"</c> and <c>"MODE_AUTO,MODE_MANUAL"</c> as MODE_MANUAL (riot-sdk#3 review S1). Python's reader is by member name and
-    /// gave None for all of them. A consumer proves standstill on MODE_AUTO (control-server#639), so a value that is not spelled
-    /// exactly as declared is no mode at all, the same in both languages.
-    /// </remarks>
-    private static string? ExactMode(byte[] body)
-    {
-        try
-        {
-            using var stream = new MemoryStream(body, writable: false);
-            using var document = JsonDocument.Parse(stream);
-            if (document.RootElement.ValueKind == JsonValueKind.Object &&
-                document.RootElement.TryGetProperty("vehicle", out var vehicle) &&
-                vehicle.ValueKind == JsonValueKind.Object &&
-                vehicle.TryGetProperty("mode", out var mode) &&
-                mode.ValueKind == JsonValueKind.String)
-            {
-                var text = mode.GetString();
-                return Array.Find(KnownModes, known => string.Equals(known, text, StringComparison.Ordinal));
-            }
-        }
-        catch (JsonException)
-        {
-            // The generated read above already parsed these bytes; a document it accepted and this one does not is no mode.
-        }
-
-        return null;
+            StrictModeVehicle.ExactMode((response.Vehicle as StrictModeVehicle)?.RawMode));
     }
 
     /// <summary>

@@ -163,6 +163,9 @@ async def test_get_vehicle_execution_facts_passes_each_declared_mode_through(mod
         '3',
         '-1',
         'MODE_AUTO,MODE_MANUAL',
+        'mODE_AUTO',
+        'mODE_MANUAL',
+        'uNKNOWN',
         '',
     ],
 )
@@ -170,6 +173,23 @@ async def test_get_vehicle_execution_facts_reads_a_mode_not_spelled_as_declared_
     # riot-sdk#3 review S1: the same table as the C# test; both languages give None for every one of them.
     body = (
         '{"vehicle":{"movementState":"MT_NA","mode":"' + mode + '"},'
+        '"vehicleTaskInfo":{"key":"VEHICLE-1","procState":"IDLE"}}'
+    )
+    facts, _ = await _read(
+        "/api/task/v1/task/getVehicleInfo/VEHICLE-1",
+        body,
+        lambda session: session.tasks.get_vehicle_execution_facts("VEHICLE-1"),
+    )
+    assert facts.movement_state == "MT_NA"
+    assert facts.mode is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mode_json", ["0", "true", "{}", '["MODE_AUTO"]'])
+async def test_get_vehicle_execution_facts_reads_a_mode_that_is_not_a_string_as_none(mode_json: str) -> None:
+    # Same table as the C# test: a mode that is not a JSON string is no mode.
+    body = (
+        '{"vehicle":{"movementState":"MT_NA","mode":' + mode_json + "},"
         '"vehicleTaskInfo":{"key":"VEHICLE-1","procState":"IDLE"}}'
     )
     facts, _ = await _read(
