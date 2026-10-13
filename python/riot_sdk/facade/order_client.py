@@ -22,12 +22,13 @@ if TYPE_CHECKING:
     from riot_sdk.facade.session import RiotSession
 
 
-def _to_order_ref(result: Any, source: str) -> OrderRef:
+def _to_order_ref(result: Any, source: str, require_upper_id: bool = True) -> OrderRef:
+    """require_upper_id is False only for detailByOrderId (control-server#617)."""
     if (
         result is None
         or result.id is None
         or not result.order_id
-        or not result.upper_id
+        or (require_upper_id and not result.upper_id)
         or result.order_state is None
     ):
         raise RiotApiException(
@@ -37,7 +38,7 @@ def _to_order_ref(result: Any, source: str) -> OrderRef:
     return OrderRef(
         id=int(result.id),
         order_id=result.order_id,
-        upper_id=result.upper_id,
+        upper_id=result.upper_id or "",
         order_state=int(result.order_state),
     )
 
@@ -222,7 +223,12 @@ class OrderClient:
         return OrderLookupResult.found(upper_id, snapshot)
 
     async def get_order_by_order_id(self, order_id: str) -> OrderRef:
-        """GET /api/order/v1/orderRecord/detailByOrderId/{orderId} (BC-ORDER-005)."""
+        """GET /api/order/v1/orderRecord/detailByOrderId/{orderId} (BC-ORDER-005).
+
+        The answer need not carry an upperId: an order dispatched by hand on the RIoT web page
+        carries it as an empty string (control-server#617), and is read with upper_id "" (a
+        null or missing upperId reads as "" too). id, orderId and orderState are still required.
+        """
         if not order_id or not order_id.strip():
             raise ValueError("order_id is required")
 
@@ -234,7 +240,7 @@ class OrderClient:
             "detailByOrderId",
         )
         ensure_success(response.code, response.message)
-        return _to_order_ref(response.result, "detailByOrderId")
+        return _to_order_ref(response.result, "detailByOrderId", require_upper_id=False)
 
     async def list_orders_by_states(
         self,

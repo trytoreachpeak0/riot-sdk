@@ -266,6 +266,13 @@ public sealed class OrderClient
     /// GET /api/order/v1/orderRecord/detailByOrderId/{orderId} (BC-ORDER-005).
     /// Throws <see cref="RiotApiException"/> on business failure (ADR-sdk-0005).
     /// </summary>
+    /// <remarks>
+    /// Unlike the create and <c>detailByUpperId</c> reads, the answer need not carry an <c>upperId</c>: an order is asked for
+    /// by its own <c>orderId</c> here, and an order dispatched by hand on the RIoT web page carries <c>upperId</c> as an empty
+    /// string (control-server#617). Such an answer is read, with <see cref="OrderRef.UpperId"/> empty; a null or missing
+    /// <c>upperId</c> reads as empty too. <c>id</c>, <c>orderId</c> and <c>orderState</c> are still required
+    /// (<c>order-ref-missing</c>), and so is a result: real RIoT answers an unknown orderId with HTTP 200 and no result.
+    /// </remarks>
     public async Task<OrderRef> GetOrderByOrderIdAsync(
         string orderId,
         CancellationToken cancellationToken = default)
@@ -280,7 +287,7 @@ public sealed class OrderClient
             "detailByOrderId");
 
         RiotBusinessResponse.EnsureSuccess(response.Code, response.Message);
-        return ToOrderRef(response.Result, "detailByOrderId");
+        return ToOrderRef(response.Result, "detailByOrderId", requireUpperId: false);
     }
 
     /// <summary>
@@ -366,13 +373,17 @@ public sealed class OrderClient
     /// </summary>
     public RIoT.Sdk.Generated.Order.OrderClient Raw => _session.CreateGeneratedOrderClient();
 
+    /// <param name="requireUpperId">
+    /// False only for <c>detailByOrderId</c>, where an order without an <c>upperId</c> is a valid answer (control-server#617).
+    /// </param>
     private static OrderRef ToOrderRef(
         RIoT.Sdk.Generated.Order.Models.OrderRecordObject? result,
-        string source)
+        string source,
+        bool requireUpperId = true)
     {
         if (result?.Id is null
             || string.IsNullOrWhiteSpace(result.OrderId)
-            || string.IsNullOrWhiteSpace(result.UpperId)
+            || (requireUpperId && string.IsNullOrWhiteSpace(result.UpperId))
             || result.OrderState is null)
         {
             throw new RiotApiException(
@@ -383,7 +394,7 @@ public sealed class OrderClient
         return new OrderRef(
             result.Id.Value,
             result.OrderId,
-            result.UpperId,
+            result.UpperId ?? string.Empty,
             result.OrderState.Value);
     }
 

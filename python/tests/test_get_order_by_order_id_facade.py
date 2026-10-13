@@ -4,6 +4,8 @@ import httpx
 import pytest
 
 from riot_sdk import RiotOptions, RiotSession
+from riot_sdk.core.exceptions import RiotApiException
+from riot_sdk.core.order_ref import OrderRef
 
 _ORDER_ID = "order-2079056586101358592"
 _UPPER_ID = "riot-lab-I-20260720-120949"
@@ -60,3 +62,88 @@ async def test_get_order_by_order_id_returns_order_identifiers() -> None:
     assert order.order_id == _ORDER_ID
     assert order.upper_id == _UPPER_ID
     assert order.order_state == 5
+
+
+# control-server#617: an order dispatched by hand on the RIoT web page, read back on site on
+# 2026-10-11 15:23:21 (control-server evidence/field/20261011-W3-S1-charging/
+# 13-foreign-order-readback.txt): HTTP 200, code 0, a full result, orderState 2, upperId an
+# empty string. The fields that record names are its own; the rest is the lab body's shape.
+_WEB_PAGE_ORDER_ID = "order-2109181133127286784"
+_WEB_PAGE_ORDER_BODY = (
+    '{"code":"0","message":"成功","msgDetail":"","result":{"appointVehicleKey":"",'
+    '"createTime":"2026-10-11 15:15:43","createdBy":"admin","doneTime":"2026-10-11 15:15:48",'
+    '"executeVehicleKey":"BROKERX-0000000000000000000000000000a002","finalState":true,'
+    '"id":1757698,"isAppointEnable":0,"isDeleted":0,"lockStatus":0,"missions":[],'
+    '"orderId":"order-2109181133127286784","orderName":"iiii","orderState":2,"orderType":1,'
+    '"source":"WEB","upperId":""},"tid":""}'
+)
+
+
+def _session(body: str, paths: list[str] | None = None):
+    def handler(request: httpx.Request) -> httpx.Response:
+        if paths is not None:
+            paths.append(request.url.path)
+        return httpx.Response(200, text=body, headers={"Content-Type": "application/json"})
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler), base_url="http://riot.test/")
+    options = RiotOptions(base_url="http://riot.test", call_api_key="test-call-api-key")
+    return client, RiotSession(options, client=client)
+
+
+@pytest.mark.asyncio
+async def test_get_order_by_order_id_reads_an_order_without_an_upper_id() -> None:
+    paths: list[str] = []
+    client, session = _session(_WEB_PAGE_ORDER_BODY, paths)
+    async with client, session:
+        order = await session.order.get_order_by_order_id(_WEB_PAGE_ORDER_ID)
+
+    assert order == OrderRef(id=1757698, order_id=_WEB_PAGE_ORDER_ID, upper_id="", order_state=2)
+    assert paths == ["/api/order/v1/orderRecord/detailByOrderId/" + _WEB_PAGE_ORDER_ID]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "body",
+    [
+        '{"code":"0","message":"成功","result":{"id":7,"orderId":"order-7","upperId":null,"orderState":5}}',
+        '{"code":"0","message":"成功","result":{"id":7,"orderId":"order-7","orderState":5}}',
+    ],
+    ids=["null", "missing"],
+)
+async def test_get_order_by_order_id_reads_a_null_or_missing_upper_id_as_empty(body: str) -> None:
+    client, session = _session(body)
+    async with client, session:
+        order = await session.order.get_order_by_order_id("order-7")
+
+    assert order == OrderRef(id=7, order_id="order-7", upper_id="", order_state=5)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "body",
+    [
+        '{"code":"0","message":"成功","msgDetail":"","tid":""}',
+        '{"code":"0","message":"成功","msgDetail":"","result":null,"tid":""}',
+        '{"code":"0","message":"成功","result":{"orderId":"order-1","upperId":"","orderState":2}}',
+        '{"code":"0","message":"成功","result":{"id":1,"orderId":"","upperId":"","orderState":2}}',
+        '{"code":"0","message":"成功","result":{"id":1,"orderId":"order-1","upperId":""}}',
+    ],
+    ids=["no-result", "null-result", "no-id", "no-order-id", "no-order-state"],
+)
+async def test_get_order_by_order_id_still_refuses_an_answer_without_identity_or_state(body: str) -> None:
+    client, session = _session(body)
+    async with client, session:
+        with pytest.raises(RiotApiException) as error:
+            await session.order.get_order_by_order_id("order-1")
+
+    assert error.value.business_code == "order-ref-missing"
+
+
+@pytest.mark.asyncio
+async def test_get_order_by_upper_id_still_refuses_an_answer_without_an_upper_id() -> None:
+    client, session = _session(_WEB_PAGE_ORDER_BODY)
+    async with client, session:
+        with pytest.raises(RiotApiException) as error:
+            await session.order.get_order_by_upper_id("UPPER-1")
+
+    assert error.value.business_code == "order-ref-missing"
