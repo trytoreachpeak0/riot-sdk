@@ -31,7 +31,7 @@ RIoT（斯坦德 RCS）接口的 C# 客户端库，源码在 [trytoreachpeak0/ri
    dotnet nuget add source https://nuget.pkg.github.com/trytoreachpeak0/index.json --name github --username <GitHub 用户名> --password <令牌> --configfile "$env:APPDATA/NuGet/NuGet.Config"
    ```
 
-3. GitHub Actions：给工作流 `permissions: packages: read`，在还原步骤上设环境变量 `NuGetPackageSourceCredentials_github: Username=ci;Password=${{ github.token }}`；包的设置页「Manage Actions access」里要给消费方仓库开 Read。
+3. GitHub Actions：给工作流 `permissions: packages: read`，在还原步骤上设环境变量 `NuGetPackageSourceCredentials_github`，值是用分号隔开的 `Username` 与 `Password` 两项，`Password` 一项取 `${{ github.token }}`（写法见 trytoreachpeak0/simple 的 `.github/workflows/ci.yml`）；包的设置页「Manage Actions access」里要给消费方仓库开 Read。
 
 然后照常引用：
 
