@@ -137,6 +137,9 @@ jobs:
     # Backstop above the sum of the step timeouts (22).
     timeout-minutes: 30
     permissions:
+      # A job-level block replaces the workflow-level one, so contents: read is
+      # repeated here for the checkout below.
+      contents: read
       packages: write
 
     defaults:

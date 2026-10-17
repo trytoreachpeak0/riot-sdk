@@ -7,9 +7,12 @@
     publish.yml runs this twice with the same command shape: in the check job
     against a local folder (a rehearsal that every run does, including a run
     that does not publish), and in the push job against GitHub Packages. The
-    rehearsal proves on the runner's own SDK that the arguments parse and that
-    NuGet reads the throwaway nuget.config; run 39006594529 failed on exactly
-    that ("Unrecognized option '--configfile'") only once it tried to publish.
+    rehearsal proves, on the SDK this repository pins in global.json, that the
+    arguments parse and that NuGet reads the throwaway nuget.config; run
+    39006594529 failed on exactly that ("Unrecognized option '--configfile'")
+    only once it tried to publish. The script copies global.json into
+    -WorkDirectory, so both runs use the pinned SDK and not whatever is newest
+    on the machine.
 
     The token never appears on a command line. The script writes a nuget.config
     that names the source "github" into -WorkDirectory and runs
@@ -34,9 +37,8 @@ param(
     [Parameter(Mandatory)]
     [string] $Source,
 
-    # Must hold no global.json or nuget.config above it that should not apply;
-    # publish.yml uses folders under RUNNER_TEMP for both runs, so both resolve
-    # the same SDK.
+    # Gets this repository's global.json and a throwaway nuget.config; publish.yml
+    # uses folders under RUNNER_TEMP for both runs.
     [Parameter(Mandatory)]
     [string] $WorkDirectory
 )
@@ -44,6 +46,7 @@ param(
 $ErrorActionPreference = 'Stop'
 
 New-Item -ItemType Directory -Force -Path $WorkDirectory | Out-Null
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot '..' 'global.json') -Destination (Join-Path $WorkDirectory 'global.json') -Force
 $escaped = [System.Security.SecurityElement]::Escape($Source)
 Set-Content -LiteralPath (Join-Path $WorkDirectory 'nuget.config') -Value @"
 <?xml version="1.0" encoding="utf-8"?>
