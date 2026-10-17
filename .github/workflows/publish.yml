@@ -12,8 +12,9 @@ name: publish
 # The only credential is this run's GITHUB_TOKEN (packages: write). No
 # long-lived key or secret exists for publishing. Each package names this
 # repository in RepositoryUrl, so GitHub links it here and it takes this
-# repository's access settings. A new package starts private; do not make it
-# public (that cannot be undone).
+# repository's access settings. A new package starts private; after its first
+# publish the product owner sets each package to public in its package settings
+# (decided 2026-10-17; public cannot be made private again).
 on:
   workflow_dispatch:
     inputs:
