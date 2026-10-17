@@ -10,7 +10,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageVersion Include="Microsoft.Kiota.Bundle" Version="1.17.4" />
+    <PackageVersion Include="Microsoft.Kiota.Bundle" Version="1.22.2" />
   </ItemGroup>
 
   <!-- Test stack: xunit v3 only. xunit v2 is banned workspace-wide. -->
