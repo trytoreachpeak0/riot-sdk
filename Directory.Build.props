@@ -9,4 +9,37 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
 
+  <!-- Package metadata for RIoT.Sdk.Core, RIoT.Sdk.Generated and RIoT.Sdk.Facade,
+       published to GitHub Packages (https://nuget.pkg.github.com/trytoreachpeak0)
+       by .github/workflows/publish.yml, manual trigger only. The three packages
+       always share one version.
+
+       Never reuse a version number. The feed refuses a duplicate itself, but the
+       8005 v2 line has used numbers that never reached it and still sit in local
+       NuGet caches: 0.1.0-controlserver.1, 0.1.0-controlserver.2, 0.2.0-fp.1 to
+       0.2.0-fp.7. A package published under one of them would be shadowed by the
+       cached copy on those machines (0.2.0-fp.1 was voided for exactly that).
+       scripts/check-packages.ps1 refuses those numbers and any -controlserver or
+       -fp suffix.
+
+       RepositoryUrl links each package to this repository on GitHub Packages, so
+       it takes this repository's access settings. GitHub Packages has no symbol
+       server, so the PDB is embedded in the DLL instead of a .snupkg. -->
+  <PropertyGroup>
+    <Version>0.3.0</Version>
+    <Authors>trytoreachpeak0</Authors>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/trytoreachpeak0/riot-sdk</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/trytoreachpeak0/riot-sdk</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageTags>riot;rcs;agv</PackageTags>
+    <DebugType>embedded</DebugType>
+  </PropertyGroup>
+
+  <!-- Normalize source paths in the PDBs when building on CI, so a package built
+       there does not carry the runner's local paths. -->
+  <PropertyGroup Condition="'$(GITHUB_ACTIONS)' == 'true'">
+    <ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
+  </PropertyGroup>
+
 </Project>
