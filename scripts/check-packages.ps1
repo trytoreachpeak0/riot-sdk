@@ -13,7 +13,7 @@
     - the folder does not hold exactly RIoT.Sdk.Core, RIoT.Sdk.Generated and
       RIoT.Sdk.Facade at that version, as .nupkg;
     - a package holds a file outside the expected set (nuspec, the one DLL with
-      its embedded PDB, and the OPC files NuGet adds);
+      its embedded PDB, README.md, and the OPC files NuGet adds);
     - the nuspec lacks the license expression, repository URL or commit, or the
       Facade does not depend on Core and Generated at the same version;
     - any file contains something shaped like a credential (a JWT, a private
@@ -82,7 +82,7 @@ $localPath = '(?i)[A-Z]:\\(Users|a|actions-runner|runner)\\'
 foreach ($name in $expected | Where-Object { $_ -in $present }) {
     $path = Join-Path $PackageDirectory $name
     $id = $name.Substring(0, $name.Length - ".$version.nupkg".Length)
-    $allowed = '_rels/.rels', '[Content_Types].xml', "$id.nuspec", "lib/net8.0/$id.dll"
+    $allowed = '_rels/.rels', '[Content_Types].xml', "$id.nuspec", "lib/net8.0/$id.dll", 'README.md'
 
     Write-Output ''
     Write-Output "== $name"
@@ -150,6 +150,7 @@ foreach ($name in $expected | Where-Object { $_ -in $present }) {
                     $failures.Add("$name has no repository commit.")
                 }
                 if (-not $metadata.description) { $failures.Add("$name has no description.") }
+                if ($metadata.readme -ne 'README.md') { $failures.Add("$name nuspec names no README.md as its readme.") }
                 Write-Output "  license $($metadata.license.'#text'), repository $($metadata.repository.url) @ $($metadata.repository.commit)"
                 $dependencies = @($metadata.dependencies.group.dependency | Where-Object { $_ })
                 foreach ($dependency in $dependencies) { Write-Output "  depends on $($dependency.id) $($dependency.version)" }

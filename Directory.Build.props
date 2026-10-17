@@ -34,7 +34,14 @@
     <RepositoryType>git</RepositoryType>
     <PackageTags>riot;rcs;agv</PackageTags>
     <DebugType>embedded</DebugType>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
+
+  <!-- One readme for all three packages: what they are and how to restore them
+       from GitHub Packages. The repository README stays for the source. -->
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)docs/package-readme.md" Pack="true" PackagePath="README.md" Visible="false" />
+  </ItemGroup>
 
   <!-- Normalize source paths in the PDBs when building on CI, so a package built
        there does not carry the runner's local paths. -->
