@@ -1,0 +1,156 @@
+name: publish
+
+# Packs RIoT.Sdk.Core, RIoT.Sdk.Generated and RIoT.Sdk.Facade from main and,
+# only when asked, pushes them to GitHub Packages:
+# https://nuget.pkg.github.com/trytoreachpeak0/index.json
+#
+# Manual trigger only. A push or a pull request never runs this file. The
+# default run (push unchecked) runs only the check job: it builds, tests, packs,
+# checks and uploads the packages, and never holds a token that can publish.
+# Before checking "push", the product owner has approved this exact version
+# and file list.
+#
+# The only credentials are this run's GITHUB_TOKEN: packages: read in the check
+# job, packages: write in the push job. No long-lived key or secret exists for
+# publishing. The push job pushes the very packages the check job checked,
+# taken from this run's artifact, never a second build.
+#
+# Each package names this repository in RepositoryUrl, so GitHub links it here
+# and it takes this repository's access settings. A new package starts private;
+# after its first publish the product owner sets each package to public in its
+# package settings (decided 2026-10-17; public cannot be made private again).
+#
+# The three pushes are not atomic. If the push job fails part way, a version is
+# left on the feed for some packages and not others, and a rerun stops at the
+# first one that exists. Do not delete the half set: raise the patch version in
+# Directory.Build.props, merge, and publish again (after a new approval).
+on:
+  workflow_dispatch:
+    inputs:
+      push:
+        description: Push the packages to GitHub Packages (unchecked = build, test, pack and check only)
+        type: boolean
+        default: false
+
+# Never cancel a running job here (see test.yml): a second run waits.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: 'true'
+  DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
+  FEED: https://nuget.pkg.github.com/trytoreachpeak0/index.json
+
+jobs:
+  check:
+    # The same runner as test.yml; it is the only runner of this repository.
+    runs-on: [self-hosted, headless]
+    # Backstop above the sum of the step timeouts (42). Each step carries its
+    # own timeout, which the runner enforces itself.
+    timeout-minutes: 50
+    permissions:
+      contents: read
+      # -CheckFeed asks the feed whether this version exists.
+      packages: read
+
+    defaults:
+      run:
+        shell: pwsh
+
+    steps:
+      - name: Only from main
+        if: github.ref != 'refs/heads/main'
+        timeout-minutes: 2
+        run: |
+          Write-Output "::error::Packages are published from main only; this run is on $env:GITHUB_REF."
+          exit 1
+
+      # Actions are pinned by commit SHA: this workflow can obtain a token that
+      # publishes.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        timeout-minutes: 5
+        with:
+          persist-credentials: false
+
+      - name: dotnet --info
+        timeout-minutes: 2
+        run: dotnet --info
+
+      # Judged by exit codes only: the runner's locale is zh-CN.
+      - name: Test
+        timeout-minutes: 10
+        run: dotnet test csharp/RIoT.Sdk.Tests -c Release
+
+      - name: Pack
+        timeout-minutes: 10
+        run: dotnet pack csharp/RIoT.Sdk.sln -c Release -o "$env:RUNNER_TEMP/packages"
+
+      # Also the network check: asks nuget.pkg.github.com, through whatever proxy
+      # the runner uses, whether this version exists. A run that cannot reach the
+      # feed fails here, before anything is pushed.
+      - name: Check packages
+        timeout-minutes: 5
+        env:
+          NUGET_FEED_TOKEN: ${{ github.token }}
+        run: pwsh -File scripts/check-packages.ps1 -PackageDirectory "$env:RUNNER_TEMP/packages" -CheckFeed -FeedUrl $env:FEED
+
+      - name: Upload packages
+        timeout-minutes: 8
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: packages
+          path: ${{ runner.temp }}/packages
+          if-no-files-found: error
+
+  push:
+    needs: check
+    if: inputs.push
+    runs-on: [self-hosted, headless]
+    # Backstop above the sum of the step timeouts (17).
+    timeout-minutes: 25
+    permissions:
+      packages: write
+
+    defaults:
+      run:
+        shell: pwsh
+
+    steps:
+      - name: Download the checked packages
+        timeout-minutes: 5
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: packages
+          path: ${{ runner.temp }}/packages
+
+      # The token never appears on a command line: a throwaway nuget.config names
+      # the source "github", NuGet takes its credential from
+      # NuGetPackageSourceCredentials_github, and dotnet nuget push runs without
+      # --api-key (GitHub's documented nuget.config way to push).
+      # No --skip-duplicate: a version that already exists must fail the run.
+      # Core and Generated go first, then the Facade that needs them.
+      - name: Push to GitHub Packages
+        timeout-minutes: 12
+        env:
+          NuGetPackageSourceCredentials_github: Username=riot-sdk-ci;Password=${{ github.token }}
+        run: |
+          $config = Join-Path $env:RUNNER_TEMP 'push.nuget.config'
+          Set-Content -LiteralPath $config -Value @"
+          <?xml version="1.0" encoding="utf-8"?>
+          <configuration>
+            <packageSources>
+              <clear />
+              <add key="github" value="$env:FEED" />
+            </packageSources>
+          </configuration>
+          "@
+          foreach ($id in 'RIoT.Sdk.Core', 'RIoT.Sdk.Generated', 'RIoT.Sdk.Facade') {
+            $package = @(Get-ChildItem -LiteralPath "$env:RUNNER_TEMP/packages" -Filter "$id.*.nupkg")
+            if ($package.Count -ne 1) { Write-Output "::error::Expected one $id package, found $($package.Count)."; exit 1 }
+            dotnet nuget push $package[0].FullName --source github --configfile $config
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
