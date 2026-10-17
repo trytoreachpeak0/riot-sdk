@@ -16,3 +16,4 @@ Architecture Decision Records for this repository. Cite as `ADR-sdk-<NNNN>` (e.g
 | [ADR-sdk-0006](0006-imap-via-kiota.md) | Map/Station 经 imap OpenAPI 纳入 Kiota 生成 |
 | [ADR-sdk-0007](0007-ready-helpers-no-blocking-wait.md) | 可再派判定辅助，不内置阻塞 Wait |
 | [ADR-sdk-0008](0008-v1-explicit-non-goals.md) | 第一版明确排除的能力 |
+| [ADR-sdk-0009](0009-imap-route-graph-custom-deserialization.md) | imap 路网五端点自定义反序列化，URL 与鉴权仍走 Kiota |

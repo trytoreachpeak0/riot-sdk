@@ -46,6 +46,99 @@ public sealed class TaskClient
     }
 
     /// <summary>
+    /// GET /api/task/vehicles/getVehicleInfoByDeviceKey?key={deviceKey}.
+    /// Returns stable vehicle-card facts and rejects a mismatched response identity.
+    /// </summary>
+    public async Task<VehicleCard> GetVehicleCardAsync(
+        string deviceKey,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(deviceKey);
+
+        var client = _session.CreateGeneratedTaskClient();
+        var response = RiotBusinessResponse.RequireResponse(
+            await client.Api.Task.Vehicles.GetVehicleInfoByDeviceKey.GetAsync(config =>
+            {
+                config.QueryParameters.Key = deviceKey;
+            }, cancellationToken).ConfigureAwait(false),
+            "getVehicleInfoByDeviceKey");
+
+        RiotBusinessResponse.EnsureSuccess(response.Code, response.Message);
+        var result = response.Result ?? throw new RiotApiException(
+            "getVehicleInfoByDeviceKey returned null result.",
+            businessCode: "vehicle-card-missing");
+
+        if (!string.Equals(result.DeviceKey, deviceKey, StringComparison.Ordinal))
+        {
+            throw new RiotApiException(
+                "getVehicleInfoByDeviceKey returned a mismatched deviceKey.",
+                businessCode: "vehicle-key-mismatch");
+        }
+
+        return new VehicleCard(
+            deviceKey,
+            result.Enable,
+            result.Status,
+            result.ProcState,
+            result.CurrentMap,
+            result.CurrentPosition,
+            result.Battery,
+            result.BatteryState,
+            result.Speed,
+            result.LockStatus,
+            result.OrderTaskId);
+    }
+
+    /// <summary>
+    /// GET /api/task/v1/task/getVehicleInfo/{deviceKey}.
+    /// Returns the diagnostic vehicle and task halves as one identity-checked snapshot.
+    /// </summary>
+    /// <remarks>
+    /// Sent exactly as the generated <c>GetAsync</c> sends it -- the same <c>SendAsync</c>, no error mapping -- so timeouts,
+    /// disposal, failures and their types are the generated read's. Only the parse differs: <see cref="StrictModeVehicleAllInfo"/>
+    /// reads <c>vehicle.mode</c> as the raw string instead of through the generated enum (riot-sdk#3 review S1).
+    /// </remarks>
+    public async Task<VehicleExecutionFacts> GetVehicleExecutionFactsAsync(
+        string deviceKey,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(deviceKey);
+
+        var client = _session.CreateGeneratedTaskClient();
+        var requestInfo = client.Api.Task.V1.Task.GetVehicleInfo[deviceKey].ToGetRequestInformation();
+        var response = await _session.Adapter
+            .SendAsync(requestInfo, StrictModeVehicleAllInfo.CreateFromParseNode, default, cancellationToken)
+            .ConfigureAwait(false);
+        if (response?.Vehicle is null || response.VehicleTaskInfo is null)
+        {
+            throw new RiotApiException(
+                "getVehicleInfo returned a missing vehicle or vehicleTaskInfo.",
+                businessCode: "vehicle-execution-facts-missing");
+        }
+
+        if (!string.Equals(response.VehicleTaskInfo.Key, deviceKey, StringComparison.Ordinal))
+        {
+            throw new RiotApiException(
+                "getVehicleInfo returned a mismatched vehicleTaskInfo key.",
+                businessCode: "vehicle-key-mismatch");
+        }
+
+        return new VehicleExecutionFacts(
+            deviceKey,
+            response.Vehicle.MovementState?.ToString(),
+            response.Vehicle.ControlState?.ToString(),
+            response.Vehicle.EmergencyState?.ToString(),
+            response.Vehicle.BreakSwitchState?.ToString(),
+            response.Vehicle.LocationState?.ToString(),
+            response.Vehicle.Speed,
+            response.VehicleTaskInfo.ProcState?.ToString(),
+            response.VehicleTaskInfo.ProcessingOrder,
+            response.VehicleTaskInfo.Enable,
+            response.VehicleTaskInfo.IntegrationLevel?.ToString(),
+            StrictModeVehicle.ExactMode((response.Vehicle as StrictModeVehicle)?.RawMode));
+    }
+
+    /// <summary>
     /// POST /api/task/v1/route/getRouteCostsBy — RouteCost for one vehicle to a station (BC-ROUTE-001).
     /// <c>CostsMm = -1</c> means unreachable and is returned, not thrown (ADR-sdk-0005).
     /// </summary>
@@ -160,6 +253,44 @@ public sealed class TaskClient
             response.Result,
             "queryNearestStart",
             "near-start-missing");
+    }
+
+    /// <summary>
+    /// GET /api/task/v1/route/ — whether RIoT currently holds any dynamic route cost.
+    /// Throws <see cref="RiotApiException"/> on business failure (ADR-sdk-0005).
+    /// </summary>
+    /// <remarks>
+    /// Reports presence and a count, not the values: every observation of this endpoint has
+    /// answered <c>"result":{}</c>, so its populated shape has never been seen and there is
+    /// nothing honest to deserialize into. The body is read here rather than through the generated
+    /// model for the same reason (ADR-sdk-0009 covers the same choice for the imap endpoints).
+    /// </remarks>
+    public async Task<DynamicRouteCostPresence> ReadDynamicRouteCostPresenceAsync(
+        CancellationToken cancellationToken = default)
+    {
+        const string operation = "route/";
+        var client = _session.CreateGeneratedTaskClient();
+        var request = client.Api.Task.V1.Route.EmptyPathSegment.ToGetRequestInformation();
+
+        return await RiotWire.ReadAsync(
+            _session.Adapter,
+            request,
+            operation,
+            result => result.ValueKind switch
+            {
+                System.Text.Json.JsonValueKind.Object =>
+                    Presence(System.Linq.Enumerable.Count(result.EnumerateObject())),
+                System.Text.Json.JsonValueKind.Array => Presence(result.GetArrayLength()),
+                // Undefined or null: the field was absent, which is the same "nothing here" as an
+                // empty object. Anything else is a shape violation and fails closed.
+                System.Text.Json.JsonValueKind.Undefined or System.Text.Json.JsonValueKind.Null =>
+                    Presence(0),
+                _ => throw new RiotApiException(
+                    $"{operation} returned result of kind {result.ValueKind}, expected an object."),
+            },
+            cancellationToken).ConfigureAwait(false);
+
+        static DynamicRouteCostPresence Presence(int count) => new(count > 0, count);
     }
 
     /// <summary>
