@@ -26,7 +26,7 @@
        it takes this repository's access settings. GitHub Packages has no symbol
        server, so the PDB is embedded in the DLL instead of a .snupkg. -->
   <PropertyGroup>
-    <Version>0.3.0</Version>
+    <Version>0.3.1</Version>
     <Authors>trytoreachpeak0</Authors>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/trytoreachpeak0/riot-sdk</PackageProjectUrl>
