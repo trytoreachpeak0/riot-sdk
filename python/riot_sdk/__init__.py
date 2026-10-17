@@ -5,8 +5,25 @@ from riot_sdk.core.exceptions import RiotApiException
 from riot_sdk.core.dispatchable_vehicles import DispatchableVehicle, resolve_device_key
 from riot_sdk.core.maps import Map
 from riot_sdk.core.stations import Station
+from riot_sdk.core.dynamic_route_cost import DynamicRouteCostPresence
 from riot_sdk.core.route_cost import RouteCost
+from riot_sdk.core.route_graph import (
+    MapEdge,
+    MapEdgeGroup,
+    MapStationDetail,
+    RemovedEdge,
+    RemovedStation,
+)
+from riot_sdk.core.order_mission_action import OrderMissionAction
 from riot_sdk.core.order_ref import OrderRef
+from riot_sdk.core.order_snapshots import (
+    OrderLookupResult,
+    OrderLookupStatus,
+    OrderMissionSnapshot,
+    OrderSnapshot,
+)
+from riot_sdk.core.order_state_page import OrderStatePage, OrderStateRecord
+from riot_sdk.core.vehicle_facts import VehicleCard, VehicleExecutionFacts
 from riot_sdk.core.ready_for_next_order import is_ready_for_next_order
 from riot_sdk.facade.session import RiotSession
 
@@ -19,6 +36,21 @@ __all__ = [
     "Map",
     "Station",
     "RouteCost",
+    "DynamicRouteCostPresence",
+    "MapEdge",
+    "MapStationDetail",
+    "RemovedEdge",
+    "RemovedStation",
+    "MapEdgeGroup",
     "OrderRef",
+    "OrderMissionAction",
+    "OrderLookupResult",
+    "OrderLookupStatus",
+    "OrderMissionSnapshot",
+    "OrderSnapshot",
+    "OrderStatePage",
+    "OrderStateRecord",
+    "VehicleCard",
+    "VehicleExecutionFacts",
     "is_ready_for_next_order",
 ]
