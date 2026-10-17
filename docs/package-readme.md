@@ -14,13 +14,16 @@ RIoT（斯坦德 RCS）接口的 C# 客户端库，源码在 [trytoreachpeak0/ri
 
 包发布在 `https://nuget.pkg.github.com/trytoreachpeak0/index.json`，是公开的。GitHub 的 NuGet 源连读取公开包也要令牌，任何 GitHub 账号的令牌都行。
 
-1. 在消费方仓库的 `nuget.config` 里加这个源，并用包来源映射让 `RIoT.Sdk.*` 只从它拿：
+1. 在消费方仓库的 `nuget.config` 里加这个源，并用包来源映射让 `RIoT.Sdk.*` 只从它拿、其余包从 nuget.org 拿。`Facade` 和 `Generated` 依赖 nuget.org 上的 `Microsoft.Kiota.Bundle`，少了 nuget.org 那条映射，还原会报 `NU1100`：
 
    ```xml
    <packageSources>
+     <clear />
+     <add key="nuget.org" value="https://api.nuget.org/v3/index.json" protocolVersion="3" />
      <add key="github" value="https://nuget.pkg.github.com/trytoreachpeak0/index.json" />
    </packageSources>
    <packageSourceMapping>
+     <packageSource key="nuget.org"><package pattern="*" /></packageSource>
      <packageSource key="github"><package pattern="RIoT.Sdk.*" /></packageSource>
    </packageSourceMapping>
    ```

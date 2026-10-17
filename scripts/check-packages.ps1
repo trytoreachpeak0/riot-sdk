@@ -13,14 +13,15 @@
     - the folder does not hold exactly RIoT.Sdk.Core, RIoT.Sdk.Generated and
       RIoT.Sdk.Facade at that version, as .nupkg;
     - a package holds a file outside the expected set (nuspec, the one DLL with
-      its embedded PDB, README.md, and the OPC files NuGet adds);
+      its embedded PDB, README.md, and the OPC files NuGet adds), or lacks the
+      nuspec, the DLL or README.md;
     - the nuspec lacks the license expression, repository URL or commit, or the
       Facade does not depend on Core and Generated at the same version;
     - any file contains something shaped like a credential (a JWT, a private
       key, a bearer token, a password or key assignment) or an absolute local
       path (build with ContinuousIntegrationBuild=true);
     - with -CheckFeed, the GitHub Packages feed already holds that version, or
-      cannot be asked. The feed needs a token with read access to packages in
+      cannot be asked, or answers with something other than a version list. The feed needs a token with read access to packages in
       the environment variable NUGET_FEED_TOKEN (in publish.yml, GITHUB_TOKEN).
       This is a real NuGet API request to nuget.pkg.github.com, so it also
       proves the runner can reach the feed.
@@ -82,13 +83,16 @@ $localPath = '(?i)[A-Z]:\\(Users|a|actions-runner|runner)\\'
 foreach ($name in $expected | Where-Object { $_ -in $present }) {
     $path = Join-Path $PackageDirectory $name
     $id = $name.Substring(0, $name.Length - ".$version.nupkg".Length)
-    $allowed = '_rels/.rels', '[Content_Types].xml', "$id.nuspec", "lib/net8.0/$id.dll", 'README.md'
+    $required = "$id.nuspec", "lib/net8.0/$id.dll", 'README.md'
+    $allowed = @('_rels/.rels', '[Content_Types].xml') + $required
 
     Write-Output ''
     Write-Output "== $name"
     $zip = [System.IO.Compression.ZipFile]::OpenRead($path)
     try {
+        $seen = [System.Collections.Generic.HashSet[string]]::new()
         foreach ($entry in $zip.Entries) {
+            [void]$seen.Add($entry.FullName)
             Write-Output ("  {0,10:N0}  {1}" -f $entry.Length, $entry.FullName)
             if ($entry.FullName -notin $allowed -and $entry.FullName -notmatch '^package/services/metadata/core-properties/[0-9a-f]+\.psmdcp$') {
                 $failures.Add("$name holds unexpected file $($entry.FullName).")
@@ -98,10 +102,19 @@ foreach ($name in $expected | Where-Object { $_ -in $present }) {
             $buffer = [System.IO.MemoryStream]::new()
             try { $stream.CopyTo($buffer) } finally { $stream.Dispose() }
             $bytes = $buffer.ToArray()
-            foreach ($text in [System.Text.Encoding]::UTF8.GetString($bytes), [System.Text.Encoding]::Unicode.GetString($bytes)) {
+            # UTF-16 is decoded from both byte alignments: a string in a DLL's #US
+            # heap follows a variable-length size prefix, so it starts at an odd
+            # offset about as often as at an even one.
+            $texts = [ordered]@{
+                'UTF-8'           = [System.Text.Encoding]::UTF8.GetString($bytes)
+                'UTF-16, even'    = [System.Text.Encoding]::Unicode.GetString($bytes)
+                'UTF-16, odd'     = $bytes.Length -gt 1 ? [System.Text.Encoding]::Unicode.GetString($bytes, 1, $bytes.Length - 1) : ''
+            }
+            foreach ($decoding in $texts.GetEnumerator()) {
+                $text = $decoding.Value
                 foreach ($pattern in $credentialPatterns.GetEnumerator()) {
                     foreach ($match in [regex]::Matches($text, $pattern.Value)) {
-                        $failures.Add("$name/$($entry.FullName): looks like a $($pattern.Key) at offset $($match.Index) (value not shown).")
+                        $failures.Add("$name/$($entry.FullName): looks like a $($pattern.Key) ($($decoding.Key), character $($match.Index); value not shown).")
                     }
                 }
                 if ($text -match $localPath) {
@@ -164,6 +177,9 @@ foreach ($name in $expected | Where-Object { $_ -in $present }) {
                 }
             }
         }
+        foreach ($file in $required) {
+            if (-not $seen.Contains($file)) { $failures.Add("$name lacks $file.") }
+        }
     }
     finally {
         $zip.Dispose()
@@ -188,7 +204,13 @@ if ($CheckFeed) {
             Write-Output "Feed: $id not published yet."
         }
         elseif ($response.StatusCode -eq 200) {
-            $published = @(($response.Content | ConvertFrom-Json).versions)
+            # A 200 that is not a version list cannot prove the version is free.
+            $body = try { $response.Content | ConvertFrom-Json -AsHashtable } catch { $null }
+            if ($body -isnot [System.Collections.IDictionary] -or -not $body.ContainsKey('versions') -or $body.versions -isnot [System.Collections.IList]) {
+                $failures.Add("The feed answered 200 for $id without a version list; cannot tell whether $version is free.")
+                continue
+            }
+            $published = @($body.versions)
             Write-Output "Feed: $id has $($published -join ', ')"
             if ($version.ToLowerInvariant() -in $published) { $failures.Add("The feed already has $id $version.") }
         }
