@@ -44,10 +44,90 @@ public class GetOrderByOrderIdFacadeTests
         Assert.Equal(5, order.OrderState);
     }
 
+    // control-server#617: an order dispatched by hand on the RIoT web page, read back on site on 2026-10-11 15:23:21
+    // (control-server evidence/field/20261011-W3-S1-charging/13-foreign-order-readback.txt): HTTP 200, code 0, a full
+    // result, orderState 2, upperId an empty string. The fields that record names are its own; the rest is the lab body's
+    // shape, since the field read kept only those.
+    private const string WebPageOrderId = "order-2109181133127286784";
+
+    private const string WebPageOrderBody =
+        """
+        {"code":"0","message":"成功","msgDetail":"","result":{"appointVehicleKey":"","createTime":"2026-10-11 15:15:43","createdBy":"admin","doneTime":"2026-10-11 15:15:48","executeVehicleKey":"BROKERX-0000000000000000000000000000a002","finalState":true,"id":1757698,"isAppointEnable":0,"isDeleted":0,"lockStatus":0,"missions":[],"orderId":"order-2109181133127286784","orderName":"iiii","orderState":2,"orderType":1,"source":"WEB","upperId":""},"tid":""}
+        """;
+
+    [Fact]
+    public async Task GetOrderByOrderId_reads_an_order_without_an_upper_id()
+    {
+        await using var session = Session(WebPageOrderBody, out FixedJsonHandler handler);
+
+        OrderRef order = await session.Order.GetOrderByOrderIdAsync(WebPageOrderId, TestContext.Current.CancellationToken);
+
+        Assert.Equal(new OrderRef(1757698, WebPageOrderId, "", 2), order);
+        Assert.Equal("/api/order/v1/orderRecord/detailByOrderId/" + WebPageOrderId, Assert.Single(handler.Paths));
+    }
+
+    [Theory]
+    [InlineData("null", """{"code":"0","message":"成功","result":{"id":7,"orderId":"order-7","upperId":null,"orderState":5}}""")]
+    [InlineData("missing", """{"code":"0","message":"成功","result":{"id":7,"orderId":"order-7","orderState":5}}""")]
+    [InlineData("whitespace", """{"code":"0","message":"成功","result":{"id":7,"orderId":"order-7","upperId":"  ","orderState":5}}""")]
+    public async Task GetOrderByOrderId_reads_any_absent_upper_id(string shape, string body)
+    {
+        await using var session = Session(body, out _);
+
+        OrderRef order = await session.Order.GetOrderByOrderIdAsync("order-7", TestContext.Current.CancellationToken);
+
+        Assert.Equal((7, "order-7", 5), (order.Id, order.OrderId, order.OrderState));
+        Assert.Equal(shape == "whitespace" ? "  " : "", order.UpperId);
+    }
+
+    /// <summary>Only the upperId is relaxed: an answer without an id, an orderId, an orderState or a result is still refused.</summary>
+    [Theory]
+    [InlineData("no-result", """{"code":"0","message":"成功","msgDetail":"","tid":""}""")]
+    [InlineData("null-result", """{"code":"0","message":"成功","msgDetail":"","result":null,"tid":""}""")]
+    [InlineData("no-id", """{"code":"0","message":"成功","result":{"orderId":"order-1","upperId":"","orderState":2}}""")]
+    [InlineData("no-order-id", """{"code":"0","message":"成功","result":{"id":1,"orderId":"","upperId":"","orderState":2}}""")]
+    [InlineData("no-order-state", """{"code":"0","message":"成功","result":{"id":1,"orderId":"order-1","upperId":""}}""")]
+    public async Task GetOrderByOrderId_still_refuses_an_answer_without_its_identity_or_state(string shape, string body)
+    {
+        Assert.NotEmpty(shape);
+        await using var session = Session(body, out _);
+
+        RiotApiException error = await Assert.ThrowsAsync<RiotApiException>(() =>
+            session.Order.GetOrderByOrderIdAsync("order-1", TestContext.Current.CancellationToken));
+
+        Assert.Equal("order-ref-missing", error.BusinessCode);
+    }
+
+    /// <summary>
+    /// The read by upperId stays strict: it asks for an order by the very upperId this SDK created it under, so an answer
+    /// without one is not that order.
+    /// </summary>
+    [Fact]
+    public async Task GetOrderByUpperId_still_refuses_an_answer_without_an_upper_id()
+    {
+        await using var session = Session(WebPageOrderBody, out _);
+
+        RiotApiException error = await Assert.ThrowsAsync<RiotApiException>(() =>
+            session.Order.GetOrderByUpperIdAsync("UPPER-1", TestContext.Current.CancellationToken));
+
+        Assert.Equal("order-ref-missing", error.BusinessCode);
+    }
+
+    private static RiotSession Session(string body, out FixedJsonHandler handler)
+    {
+        handler = new FixedJsonHandler(HttpStatusCode.OK, body);
+        var http = new HttpClient(handler) { BaseAddress = new Uri("http://riot.test/") };
+        return new RiotSession(
+            new RiotOptions { BaseUrl = "http://riot.test", CallApiKey = "test-call-api-key" },
+            http);
+    }
+
     private sealed class FixedJsonHandler : HttpMessageHandler
     {
         private readonly HttpStatusCode _status;
         private readonly string _body;
+
+        public List<string> Paths { get; } = [];
 
         public FixedJsonHandler(HttpStatusCode status, string body)
         {
@@ -59,6 +139,7 @@ public class GetOrderByOrderIdFacadeTests
             HttpRequestMessage request,
             CancellationToken cancellationToken)
         {
+            Paths.Add(request.RequestUri!.AbsolutePath);
             var response = new HttpResponseMessage(_status)
             {
                 Content = new StringContent(_body, Encoding.UTF8, "application/json"),

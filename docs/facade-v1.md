@@ -48,7 +48,7 @@
 |---|---|---|
 | `CreateMoveOrderAsync` | `create_move_order` | BC-ORDER-001 / BC-ORDER-005 |
 | `GetOrderByUpperIdAsync` | `get_order_by_upper_id` | BC-ORDER-005 |
-| `GetOrderByOrderIdAsync` | `get_order_by_order_id` | BC-ORDER-005 |
+| `GetOrderByOrderIdAsync` | `get_order_by_order_id` | BC-ORDER-005；不要求 `upperId`，空或缺读成空串（RIoT 网页手动派的单，control-server#617） |
 | `PriorityExecAsync` | `priority_exec` | BC-ORDER-014；参数为字符串 `orderId` |
 
 ## Maps
