@@ -49,9 +49,9 @@ jobs:
   check:
     # The same runner as test.yml; it is the only runner of this repository.
     runs-on: [self-hosted, headless]
-    # Backstop above the sum of the step timeouts (42). Each step carries its
+    # Backstop above the sum of the step timeouts (47). Each step carries its
     # own timeout, which the runner enforces itself.
-    timeout-minutes: 50
+    timeout-minutes: 55
     permissions:
       contents: read
       # -CheckFeed asks the feed whether this version exists.
@@ -98,6 +98,30 @@ jobs:
           NUGET_FEED_TOKEN: ${{ github.token }}
         run: pwsh -File scripts/check-packages.ps1 -PackageDirectory "$env:RUNNER_TEMP/packages" -CheckFeed -FeedUrl $env:FEED
 
+      # Every run, including one that does not publish: push the checked packages
+      # to a local folder with the push job's script, command shape and SDK, so
+      # a push command that cannot even parse fails here (it did, only on the
+      # real push, in run 39006594529). The HTTP part (auth, upload) is not
+      # covered; -CheckFeed above covers the read side of it.
+      - name: Rehearse the push to a local folder
+        timeout-minutes: 5
+        env:
+          NuGetPackageSourceCredentials_github: Username=riot-sdk-ci;Password=rehearsal-not-a-token
+        run: |
+          # dotnet nuget push does not create a missing folder source.
+          $feed = Join-Path $env:RUNNER_TEMP 'rehearsal-feed'
+          Remove-Item -LiteralPath $feed -Recurse -Force -ErrorAction Ignore
+          New-Item -ItemType Directory -Path $feed | Out-Null
+          pwsh -File scripts/push-packages.ps1 -PackageDirectory "$env:RUNNER_TEMP/packages" -Source $feed -WorkDirectory "$env:RUNNER_TEMP/push-rehearsal"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $pushed = @(Get-ChildItem -LiteralPath $feed -Recurse -Filter '*.nupkg' | ForEach-Object Name | Sort-Object)
+          $expected = @(Get-ChildItem -LiteralPath "$env:RUNNER_TEMP/packages" -Filter '*.nupkg' | ForEach-Object { $_.Name.ToLowerInvariant() } | Sort-Object)
+          Write-Output "Rehearsal feed holds: $($pushed -join ', ')"
+          if ($expected.Count -ne 3 -or (Compare-Object $expected @($pushed | ForEach-Object ToLowerInvariant))) {
+            Write-Output "::error::The rehearsal feed should hold exactly the three checked packages."
+            exit 1
+          }
+
       - name: Upload packages
         timeout-minutes: 8
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -110,9 +134,12 @@ jobs:
     needs: check
     if: inputs.push
     runs-on: [self-hosted, headless]
-    # Backstop above the sum of the step timeouts (17).
-    timeout-minutes: 25
+    # Backstop above the sum of the step timeouts (22).
+    timeout-minutes: 30
     permissions:
+      # A job-level block replaces the workflow-level one, so contents: read is
+      # repeated here for the checkout below.
+      contents: read
       packages: write
 
     defaults:
@@ -120,6 +147,12 @@ jobs:
         shell: pwsh
 
     steps:
+      # For scripts/push-packages.ps1 only; nothing is built here.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        timeout-minutes: 5
+        with:
+          persist-credentials: false
+
       - name: Download the checked packages
         timeout-minutes: 5
         uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
@@ -127,30 +160,11 @@ jobs:
           name: packages
           path: ${{ runner.temp }}/packages
 
-      # The token never appears on a command line: a throwaway nuget.config names
-      # the source "github", NuGet takes its credential from
-      # NuGetPackageSourceCredentials_github, and dotnet nuget push runs without
-      # --api-key (GitHub's documented nuget.config way to push).
-      # No --skip-duplicate: a version that already exists must fail the run.
-      # Core and Generated go first, then the Facade that needs them.
+      # Same script and command shape as the rehearsal in the check job. The
+      # token reaches NuGet only through NuGetPackageSourceCredentials_github,
+      # never a command line (see scripts/push-packages.ps1).
       - name: Push to GitHub Packages
         timeout-minutes: 12
         env:
           NuGetPackageSourceCredentials_github: Username=riot-sdk-ci;Password=${{ github.token }}
-        run: |
-          $config = Join-Path $env:RUNNER_TEMP 'push.nuget.config'
-          Set-Content -LiteralPath $config -Value @"
-          <?xml version="1.0" encoding="utf-8"?>
-          <configuration>
-            <packageSources>
-              <clear />
-              <add key="github" value="$env:FEED" />
-            </packageSources>
-          </configuration>
-          "@
-          foreach ($id in 'RIoT.Sdk.Core', 'RIoT.Sdk.Generated', 'RIoT.Sdk.Facade') {
-            $package = @(Get-ChildItem -LiteralPath "$env:RUNNER_TEMP/packages" -Filter "$id.*.nupkg")
-            if ($package.Count -ne 1) { Write-Output "::error::Expected one $id package, found $($package.Count)."; exit 1 }
-            dotnet nuget push $package[0].FullName --source github --configfile $config
-            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          }
+        run: pwsh -File scripts/push-packages.ps1 -PackageDirectory "$env:RUNNER_TEMP/packages" -Source $env:FEED -WorkDirectory "$env:RUNNER_TEMP/push"
