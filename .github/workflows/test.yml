@@ -2,7 +2,8 @@ name: test
 
 # Runs on the self-hosted runner on win11-01 (factory server Hyper-V guest).
 # There is no hosted-runner fallback: this workspace deliberately does not use
-# GitHub-hosted runners. See the workspace root CLAUDE.md.
+# GitHub-hosted runners. See the CI section of 8005-agv-program
+# docs/agents/workspace-rules.md (the shared workspace rules, program#228).
 on:
   push:
     branches: [main]
@@ -34,6 +35,14 @@ jobs:
       - name: dotnet --info
         shell: pwsh
         run: dotnet --info
+
+      # program#230: CLAUDE.md must import AGENTS.md on its first line, and both
+      # files must be pinned to eol=lf, the layout 8005-agv-protocol piloted
+      # (program#228). Pure input, under a second, ahead of the suite.
+      - name: Agent instructions
+        timeout-minutes: 1
+        shell: pwsh
+        run: pwsh -NoProfile -File ./scripts/Test-AgentInstructions.ps1
 
       # Never assert on dotnet's console output here: the guest's locale is
       # zh-CN and it prints 已通过! rather than Passed!. The exit code is the
